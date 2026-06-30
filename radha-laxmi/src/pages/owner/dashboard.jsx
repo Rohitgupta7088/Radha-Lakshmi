@@ -1,3 +1,208 @@
+// import React, {useEffect, useState} from 'react'
+// import { useAppContext } from '../../context/AppContext'
+// import { assets } from '../../assets/data'
+// import toast from 'react-hot-toast'
+
+// const dashboard = () => {
+//   const { user, currency, axios, getToken } = useAppContext()
+//   const [dashboardData, setDashboardData] = useState({
+//     orders: [],
+//     totalOrders: 0,
+//     totalRevenue: 0,
+//   })
+
+//   const getDashboardData = async ()=>{
+//     try {
+//       const {data} = await axios.get("/api/orders/", {
+//         headers: {
+//           Authorization: `Bearer ${await getToken()}`
+//         }
+//       })
+
+//       if(data.success){
+//         setDashboardData(data.dashboardData)
+//       }else{
+//         toast.error(data.message);
+//       }
+//     } catch (error) {
+//       toast.error(error.message)
+//     }
+//   }
+
+//   const statusHandler = async(e, orderId)=>{
+//     try {
+//       const {data} = await axios.post("/api/orders/status", {orderId, status: e.target.value}, {
+//         headers: {
+//           Authorization: `Bearer ${await getToken()}`
+//         }
+//       })
+
+//       if(data.success){
+//         await getDashboardData()
+//         toast.success(data.message)
+
+//       }
+//     } catch (error) {
+//       console.log(error)
+//       toast.error(error.message)
+//     }
+//   }
+
+//   useEffect(()=>{
+//     if(user){
+//       getDashboardData()
+//     }
+//   },[user])
+
+//   return (
+//     <div className='md:px-8 py-6 xl:py-8 m-1 sm:m-3 h-[97vh] overflow-y-scroll lg:w-11/12 bg-white/50 shadow rounded-xl'>
+//       <div className='grid grid-cols-2 gap-4'>
+
+//         <div className='flex items-center justify-center gap-7 p-5 bg-[#fff4d2] lg:min-w-56 rounded-xl'>
+//           <img src={assets.graph} alt="" className='hidden sm:flex w-10 h-10'/>
+//           <div>
+//             <h4 className='text-[14px] md:text-[16px] font-bold'>{dashboardData.orders.filter(order => order.items.some(item => item.products)).length.toString().padStart(2, "0")}</h4>
+//             <h5 className='text-[14px] md:text-[16px] font-bold text-gray-800'>Total Sales</h5>
+//           </div>
+//         </div>
+
+//         <div className='flex items-center justify-center gap-7 p-5 bg-[#fff4d2] lg:min-w-56 rounded-xl'>
+//           <img src={assets.dollar} alt="" className='hidden sm:flex w-10 h-10'/>
+//           <div>
+//             <h4 className='text-[14px] md:text-[16px] font-bold'>{currency}{dashboardData?.totalRevenue ||  0}</h4>
+//             <h5 className='text-[14px] md:text-[16px] font-bold text-gray-800'>Total Earning</h5>
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* All Orders */}
+//       <div className='mt-10'>
+//         {dashboardData.orders.filter(order => order.items.some(item => item.products)).map((order)=>(
+//           <div key={order._id} className='bg-white p-3 mb-4 rounded-2xl'>
+//             {/* product list */}
+//             {order.items.filter(item => item.products).map((item, idx)=>(
+//             <div key={idx} className='text-gray-700 flex flex-col lg:flex-row gap-4 mb-3'>
+//               <div className='flex flex-[2] gap-x-2'>
+
+//                 <div className='flex items-center justify-center bg-gray-200 rounded-xl w-20 h-20 shrink-0'>
+//                   {item.products?.images?.[0]
+//                     ? <img src={item.products.images[0]} alt="" className='max-h-20 max-w-20 object-contain'/>
+//                     : <span className='text-gray-400 text-[10px] text-center px-1'>No Image</span>
+//                   }
+//                 </div>
+
+//                 <div className='block w-full'>
+
+//                   <h5 className='text-[14px] md:text-[16px] font-bold upperCase line-clamp-1'>
+//                     {item.products?.title || '⚠ Deleted Product'}
+//                   </h5>
+
+//                   <div className='flex fex-wrap gap-3 max-sm:gap-y-1 mt-1'>
+
+//                     <div className='flex items-center gap-x-2'>
+//                       <h5 className='text-[14px] font-[500]'>Price:</h5>
+//                       <p>
+//                       {item.products?.price?.[item.size] ? `${currency}${item.products.price[item.size]}` : 'N/A'}
+//                       </p>
+//                     </div>
+
+//                     <div className='flex items-center gap-x-2'>
+//                       <h5 className='text-[14px] font-[500]'>Quantity:</h5>
+//                       <p>{item.quantity}</p>
+//                     </div>
+
+//                     <div className='flex items-center gap-x-2'>
+//                       <h5 className='text-[14px] font-[500]'>Size:</h5>
+//                       <p>{item.size}</p>
+//                     </div>
+
+                    
+//                   </div>
+//                 </div>
+//               </div>
+//             </div>
+//           ))}
+
+//           {/* OrderItems */}
+//           <div className='flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-t border-gray-300 pt-3'>
+//             <div className='flex flex-col gap-1'>
+
+//               <div className='flex items-center gap-x-2'>
+//                 <h5 className='text-[14px] font-[500]'>Order-Id:</h5>
+//                 <p className='text-gray-600 text-xs break-all'>{order._id}</p>
+//               </div>
+
+//               <div className='flex gap-4'>
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Customer:</h5>
+//                   <p className='text-gray-600 text-sm'>{order.address.firstName} {order.address.lastName}</p>
+//                   <div>
+//                     <div className='flex items-center gap-x-2'>
+//                       <h5 className='text-[14px] font-[500]'>Contact:</h5>
+//                       <p className='text-gray-600 text-sm'>{order.address.phone}</p>
+//                     </div>
+//                   </div>
+//                  </div>
+//               </div>
+
+//               <div className='flex gap-4'>
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Address:</h5>
+//                   <p className='text-gray-600 text-sm'>{order.address.street}, {order.address.city}, {" "}, {order.address.state}, {order.address.country}, {" "}, {order.address.zipcode}</p>
+//                 </div>
+//               </div>
+
+//               <div className='flex gap-4'>
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Payment Status:</h5>
+//                   <p className='text-gray-600 text-sm'>{order.isPaid ? "Done" : "Pending"}</p>
+//                 </div>
+
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Method:</h5>
+//                   <p className='text-gray-600 text-sm'>{order.paymentMethod}</p>
+//                 </div>
+//               </div>
+
+//               <div className='flex gap-4'>
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Date:</h5>
+//                   <p className='text-gray-600 text-sm'>{new Date(order.createdAt).toDateString()}</p>
+//                 </div>
+
+//                 <div className='flex items-center gap-x-2'>
+//                   <h5 className='text-[14px] font-[500]'>Amount:</h5>
+//                   <p className='text-gray-600 text-sm'>{currency}{order.amount}</p>
+//                 </div>
+//               </div>
+//             </div>
+
+//             <div className='flex items-center gap-2'>
+//               <h5 className='text-[14px] font-[500]'>Status:</h5>
+//               <select onChange={(e)=>statusHandler(e, order._id)} value={order.status} className='text-xs font-semibold p-1 ring-1 ring-slate-900/5 rounded max-w-36 bg-white'>
+//                 <option value="Order Placed">Order Placed</option>
+//                 <option value="Packing">Packing</option>
+//                 <option value="Shipping">Shipping</option>
+//                 <option value="Out for delivery">Out for delivery</option>
+//                 <option value="Delivered">Delivered</option>
+//               </select>
+//             </div>
+//           </div>
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   )
+// }
+
+// export default dashboard
+
+
+
+
+
+
+
 import React, {useEffect, useState} from 'react'
 import { useAppContext } from '../../context/AppContext'
 import { assets } from '../../assets/data'
@@ -41,6 +246,27 @@ const dashboard = () => {
         await getDashboardData()
         toast.success(data.message)
 
+      }
+    } catch (error) {
+      console.log(error)
+      toast.error(error.message)
+    }
+  }
+
+  const markPaidHandler = async(orderId)=>{
+    try {
+      const {data} = await axios.post("/api/orders/upi/mark-paid", {orderId}, {
+        headers: {
+          Authorization: `Bearer ${await getToken()}`
+        }
+      })
+
+      if(data.success){
+        await getDashboardData()
+        toast.success(data.message)
+      }
+      else{
+        toast.error(data.message)
       }
     } catch (error) {
       console.log(error)
@@ -178,6 +404,14 @@ const dashboard = () => {
             </div>
 
             <div className='flex items-center gap-2'>
+              {order.paymentMethod === "UPI" && !order.isPaid && (
+                <button
+                  onClick={() => markPaidHandler(order._id)}
+                  className='text-xs font-semibold px-3 py-1.5 rounded bg-green-600 text-white cursor-pointer hover:bg-green-700'
+                >
+                  Mark as Paid
+                </button>
+              )}
               <h5 className='text-[14px] font-[500]'>Status:</h5>
               <select onChange={(e)=>statusHandler(e, order._id)} value={order.status} className='text-xs font-semibold p-1 ring-1 ring-slate-900/5 rounded max-w-36 bg-white'>
                 <option value="Order Placed">Order Placed</option>

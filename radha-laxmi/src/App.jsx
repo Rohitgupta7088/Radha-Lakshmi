@@ -16,6 +16,7 @@ import Dashboard from './pages/owner/dashboard'
 import AddProduct from './pages/owner/AddProduct'
 import ListProduct from './pages/owner/ListProduct'
 import Processing from './pages/Processing'
+import CashfreeReturn from './pages/CashfreeReturn'
 
 const App = () => {
 
@@ -46,6 +47,7 @@ const App = () => {
                 <Route path='/my-orders' element={<Myorder/>} />
 
                 <Route path='/processing/:nextUrl' element={<Processing/>} />
+                <Route path='/cashfree-return' element={<CashfreeReturn/>} />
 
                 <Route path='/AddressForm' element={<AddressForm/>} />
 

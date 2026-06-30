@@ -39,6 +39,15 @@ app.use(clerkMiddleware())
 // Webhook route — needs raw body BEFORE express.json()
 app.post("/api/clerk", express.raw({ type: "*/*" }), clerkWebhooks)
 
+// Cashfree webhook — needs raw body for signature verification
+app.use('/api/orders/cashfree/webhook', (req, res, next) => {
+    express.raw({ type: '*/*' })(req, res, (err) => {
+        if(err) return next(err)
+        req.rawBody = req.body.toString()
+        next()
+    })
+})
+
 app.use(express.json())
 
 app.use('/api/users', userRouter)
