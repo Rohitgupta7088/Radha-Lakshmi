@@ -27,7 +27,7 @@ const Items = ({product}) => {
              width={150}
              />
 
-             <div className='absolute bottom-1 left-1 right-1 hidden group-hover:block'>
+             <div className='absolute bottom-1 left-1 right-1 block md:hidden md:group-hover:block'>
                 <button onClick={() => {
                   navigate(`/collection/${product._id}`);
                   scrollTo(0,0);
