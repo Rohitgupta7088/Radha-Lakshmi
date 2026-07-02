@@ -10,6 +10,9 @@ import forward from "./forward.svg";
 import badge from "./badge.svg";
 import heartAdd from "./heart-add.svg";
 import returnRequest from "./return-request.svg";
+import noReturn from "./non-return.png";
+import cancel from "./cancel.png";
+import Broken from "./broken.png";
 import delivery from "./delivery.svg";
 import secure from "./secure.svg";
 import right from "./right.svg";
@@ -122,6 +125,9 @@ export const assets = {
     badge,
     heartAdd,
     returnRequest,
+    noReturn,
+    Broken,
+    cancel,
     delivery,
     secure,
     right,

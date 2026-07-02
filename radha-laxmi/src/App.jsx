@@ -17,6 +17,7 @@ import AddProduct from './pages/owner/AddProduct'
 import ListProduct from './pages/owner/ListProduct'
 import Processing from './pages/Processing'
 import CashfreeReturn from './pages/Cashfreereturn'
+import TermsAndPolicy from './pages/Termsandpolicy'
 
 const App = () => {
 
@@ -50,6 +51,8 @@ const App = () => {
                 <Route path='/cashfree-return' element={<CashfreeReturn/>} />
 
                 <Route path='/AddressForm' element={<AddressForm/>} />
+
+                <Route path='/terms' element={<TermsAndPolicy/>} />
 
                 <Route path='/owner' element={<Sidebar />}>
                     <Route index element={<Dashboard/>} />
