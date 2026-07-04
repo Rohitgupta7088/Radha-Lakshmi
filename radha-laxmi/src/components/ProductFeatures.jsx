@@ -39,7 +39,7 @@ const ProductFeatures = () => {
         </div>
 
         <div className='flex items-center justify-center gap-x-4 p-2 rounded-3xl'>
-          <div><img src={assets.returnRequest} alt="" width={100} className='mb-3'/></div>
+          <div><img src={assets.returnRequest} alt="" width={200} className='mb-3'/></div>
           <div>
             <h4 className='text-[17px] md:text-[19px] font-bold capitalize'>Easy Exchange with Wrong Product with in 24 hr</h4>
             <p>The wrong size was delivered (different from what was ordered). Hassle-free exchanges with quick processing, ensuring a smooth, customer-friendly experience every time.</p>

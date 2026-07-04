@@ -27,13 +27,20 @@ const orderSchema = new mongoose.Schema({
     items: [{
         products: {type:mongoose.Schema.Types.ObjectId, required:true, ref:'Product'},
         quantity: {type:Number, required:true},
-        size: {type:String, required:true}
+        size: {type:String, required:true},
     }],
     amount: {type:Number, required:true},
     address: {type:mongoose.Schema.Types.ObjectId, required:true, ref:'Address'},
     status: {type:String, default:'Order Placed'},
     paymentMethod: {type:String, required:true},
-    isPaid: {type:Boolean, required:true, default:false}
+    isPaid: {type:Boolean, required:true, default:false},
+    // Cancel fields
+    cancelReason: {type:String, default:""},
+    // Exchange fields
+    exchangeReason: {type:String, default:""},
+    exchangeDescription: {type:String, default:""},
+    exchangeImageUrl: {type:String, default:""},
+    adminExchangeNote: {type:String, default:""},
 }, {timestamps: true})
 
 const Order = mongoose.models.Order || mongoose.model("Order", orderSchema)

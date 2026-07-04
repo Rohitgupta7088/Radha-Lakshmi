@@ -18,6 +18,8 @@ import ListProduct from './pages/owner/ListProduct'
 import Processing from './pages/Processing'
 import CashfreeReturn from './pages/Cashfreereturn'
 import TermsAndPolicy from './pages/Termsandpolicy'
+import CancelOrder from './pages/CancelOrder'
+import ExchangeOrder from './pages/ExchangeOrder'
 
 const App = () => {
 
@@ -46,6 +48,9 @@ const App = () => {
                 <Route path='/Contact' element={<Contact/>} />
                 <Route path='/Cart' element={<Cart/>} />
                 <Route path='/my-orders' element={<Myorder/>} />
+                 <Route path='/cancel-order' element={<CancelOrder/>} />
+
+                 <Route path='/exchange-order' element={<ExchangeOrder/>} />
 
                 <Route path='/processing/:nextUrl' element={<Processing/>} />
                 <Route path='/cashfree-return' element={<CashfreeReturn/>} />

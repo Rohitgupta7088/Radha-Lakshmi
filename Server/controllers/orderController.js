@@ -220,6 +220,10 @@
 //     }
 // }
 
+
+import { v2 as cloudinary } from "cloudinary"
+import { upload } from "../middleware/multer.js"
+import { getAuth } from "@clerk/express"
 import transporter from "../config/nodemailer.js"
 import { MessageAttempt } from "svix/dist/api/messageAttempt.js"
 import Order from "../models/Order.js"
@@ -674,8 +678,9 @@ export const allOrders = async (req, res)=>{
             {isPaid: true}
         ]}).populate("items.products").populate("address").sort({createdAt: -1})
 
-        const totalOrders = orders.length
-        const totalRevenue = orders.reduce((acc, o)=> acc + (o.isPaid ? o.amount : 0), 0)
+        const activeOrders = orders.filter(o => o.status !== 'Cancelled')
+        const totalOrders = activeOrders.length
+        const totalRevenue = activeOrders.reduce((acc, o)=> acc + (o.isPaid ? o.amount : 0), 0)
         res.json({success: true, dashboardData: {totalOrders, totalRevenue, orders}})
 
     } catch (error) {
@@ -684,15 +689,75 @@ export const allOrders = async (req, res)=>{
     }
 }
 
-export const updateStatus = async (req, res)=>{
+export const updateStatus = async (req, res) => {
     try {
-        const {orderId, status} = req.body
-        await Order.findByIdAndUpdate(orderId, {status})
+        const { orderId, status } = req.body
 
-        res.json({success: true, message: "Order status updated"})
+        const order = await Order.findByIdAndUpdate(orderId, { status }, { new: true })
+                                 .populate('items.products')
+                                 .populate('address')
+
+        // Send delivery email when admin marks as Delivered
+        if (status === 'Delivered' && order) {
+            const user = await User.findById(order.userId)
+            const productTitles = order.items.map(i => i.products?.title || 'Unknown').join(', ')
+
+            if (user?.email) {
+                await transporter.sendMail({
+                    from: process.env.SMTP_SENDER_EMAIL,
+                    to: user.email,
+                    subject: `Your Order Has Been Delivered 🎉 – Radha Lakshmi`,
+                    html: `
+                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                            <div style="background:#41334e;padding:24px;text-align:center;">
+                                <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                                <p style="color:#e0d8e8;margin:4px 0 0;">Your Order Has Been Delivered!</p>
+                            </div>
+                            <div style="padding:28px;">
+                                <p style="font-size:16px;">Hi <strong>${user.name || 'Customer'}</strong>, 🎉</p>
+                                <p style="color:#555;">Great news! Your order has been successfully delivered. We hope you love your bangles!</p>
+
+                                <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                    <tr style="background:#f9f9f9;">
+                                        <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td>
+                                        <td style="padding:10px;border:1px solid #eee;">${orderId}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td>
+                                        <td style="padding:10px;border:1px solid #eee;">${productTitles}</td>
+                                    </tr>
+                                    <tr style="background:#f9f9f9;">
+                                        <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Amount</td>
+                                        <td style="padding:10px;border:1px solid #eee;">₹${order.amount}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Delivered To</td>
+                                        <td style="padding:10px;border:1px solid #eee;">
+                                            ${order.address?.street || ''}, ${order.address?.city || ''}, ${order.address?.state || ''}
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                    <strong>Not happy with your order?</strong><br/>
+                                    You can request an exchange within <strong>24 hours</strong> of delivery from your 
+                                    <a href="${process.env.FRONTEND_URL}/my-orders" style="color:#41334e;">My Orders</a> page.
+                                </div>
+
+                                <p style="color:#555;">Thank you for shopping with Radha Lakshmi. We'd love to see you again! 💜</p>
+                                <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                            </div>
+                        </div>
+                    `
+                })
+            }
+        }
+
+        res.json({ success: true, message: 'Order status updated' })
+
     } catch (error) {
-        console.log(error.message);
-        res.json({success: false, message: error.message})
+        console.log(error.message)
+        res.json({ success: false, message: error.message })
     }
 }
 
@@ -715,5 +780,382 @@ export const markUPIPaid = async (req, res)=>{
     } catch (error) {
         console.log(error.message);
         res.json({success: false, message: error.message})
+    }
+}
+// ─── ADD THESE TWO FUNCTIONS at the bottom of orderController.js ───
+
+
+// Replace your existing cancelOrder function in orderController.js with this.
+// transporter, Order, User are already imported in your file — no new imports needed.
+
+export const cancelOrder = async (req, res) => {
+    try {
+        const { orderId, reason } = req.body
+        const { userId } = getAuth(req)
+
+        if (!userId) return res.json({ success: false, message: "Not Authorized" })
+
+        const order = await Order.findById(orderId).populate("items.products").populate("address")
+        if (!order) return res.json({ success: false, message: "Order not found" })
+        if (order.userId !== userId) return res.json({ success: false, message: "Unauthorized" })
+
+        const hoursSinceOrder = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60)
+        if (hoursSinceOrder > 24) {
+            return res.json({ success: false, message: "Cancellation window of 24 hours has passed" })
+        }
+
+        if (order.status === "Cancelled") {
+            return res.json({ success: false, message: "Order is already cancelled" })
+        }
+
+        // Update order status
+        await Order.findByIdAndUpdate(orderId, {
+            status: "Cancelled",
+            cancelReason: reason || "No reason provided"
+        })
+
+        // Fetch user for email
+        const user = await User.findById(userId)
+
+        const productTitles = order.items.map(item => item.products?.title || "Unknown").join(", ")
+        const addressString = order.address
+            ? `${order.address.street || "N/A"}, ${order.address.city || "N/A"}, ${order.address.state || "N/A"}, ${order.address.country || "N/A"}`
+            : "No Address"
+
+        // ── Email to Customer ──
+        if (user?.email) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: user.email,
+                subject: `Order Cancelled – Radha Lakshmi (#${orderId})`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+                        <div style="background-color: #41334e; padding: 24px; text-align: center;">
+                            <h1 style="color: #fff; margin: 0; font-size: 22px;">Radha Lakshmi</h1>
+                            <p style="color: #e0d8e8; margin: 4px 0 0;">Order Cancellation Confirmed</p>
+                        </div>
+                        <div style="padding: 28px;">
+                            <p style="font-size: 16px;">Hi <strong>${user.name || "Customer"}</strong>,</p>
+                            <p style="color: #555;">Your order has been successfully cancelled. Here are the details:</p>
+
+                            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Order ID</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${orderId}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Products</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${productTitles}</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Amount</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${process.env.CURRENCY || "₹"}${order.amount}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Delivery Address</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${addressString}</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Cancellation Reason</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${reason || "Not specified"}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Payment Method</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${order.paymentMethod}</td>
+                                </tr>
+                            </table>
+
+                            ${order.isPaid ? `
+                            <div style="background: #fff8e1; border-left: 4px solid #f0a500; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
+                                <strong>Refund Notice:</strong> Since your payment was completed, your refund will be processed within <strong>5–7 business days</strong> to your original payment method.
+                            </div>` : ""}
+
+                            <p style="color: #555; margin-top: 20px;">If you have any questions, please reach out via our <a href="${process.env.FRONTEND_URL}/Contact" style="color: #41334e;">Contact page</a>.</p>
+                            <p style="color: #999; font-size: 13px; margin-top: 24px;">— Team Radha Lakshmi</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+
+        // ── Email to Admin/Owner ──
+        if (process.env.ADMIN_EMAIL) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: `⚠️ Order Cancelled by Customer – #${orderId}`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+                        <div style="background-color: #c0392b; padding: 24px; text-align: center;">
+                            <h1 style="color: #fff; margin: 0; font-size: 22px;">Order Cancelled</h1>
+                            <p style="color: #f5c6c2; margin: 4px 0 0;">A customer has cancelled their order</p>
+                        </div>
+                        <div style="padding: 28px;">
+                            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Order ID</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${orderId}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Customer</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${user?.name || "Unknown"} (${user?.email || "No email"})</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Products</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${productTitles}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Amount</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${process.env.CURRENCY || "₹"}${order.amount}</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Cancellation Reason</td>
+                                    <td style="padding: 10px; border: 1px solid #eee; color: #c0392b;"><strong>${reason || "Not specified"}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Payment Status</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${order.isPaid ? "✅ Paid — Refund required" : "❌ Not Paid — No refund needed"}</td>
+                                </tr>
+                                <tr style="background: #f9f9f9;">
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Delivery Address</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${addressString}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; font-weight: bold; border: 1px solid #eee;">Cancelled At</td>
+                                    <td style="padding: 10px; border: 1px solid #eee;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
+                                </tr>
+                            </table>
+
+                            <p style="color: #555; font-size: 13px; margin-top: 16px;">Login to your <a href="${process.env.FRONTEND_URL}/owner" style="color: #41334e;">Dashboard</a> to review this order.</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+
+        return res.json({ success: true, message: "Order cancelled successfully" })
+
+    } catch (error) {
+        console.log("cancelOrder error:", error.message)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+export const requestExchange = async (req, res) => {
+    try {
+        const { orderId, reason, description } = req.body
+        const { userId } = getAuth(req)
+ 
+        if (!userId) return res.json({ success: false, message: "Not Authorized" })
+ 
+        const order = await Order.findById(orderId).populate("items.products").populate("address")
+        if (!order) return res.json({ success: false, message: "Order not found" })
+        if (order.userId !== userId) return res.json({ success: false, message: "Unauthorized" })
+ 
+        if (order.status !== "Delivered") {
+            return res.json({ success: false, message: "Exchange is only available after delivery" })
+        }
+ 
+        const hoursSinceDelivery = (Date.now() - new Date(order.updatedAt).getTime()) / (1000 * 60 * 60)
+        if (hoursSinceDelivery > 24) {
+            return res.json({ success: false, message: "Exchange window of 24 hours has passed" })
+        }
+ 
+        // Upload proof image to Cloudinary
+        let imageUrl = ""
+        if (req.file) {
+            cloudinary.config({
+                cloud_name: process.env.CLDN_NAME,
+                api_key: process.env.CLDN_API_KEY,
+                api_secret: process.env.CLDN_API_SECRET,
+            })
+            const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "image", folder: "exchange_proofs" })
+            imageUrl = result.secure_url
+        }
+ 
+        // Update order status
+        await Order.findByIdAndUpdate(orderId, {
+            status: "Exchange Requested",
+            exchangeReason: reason,
+            exchangeDescription: description,
+            exchangeImageUrl: imageUrl,
+        })
+ 
+        const user = await User.findById(userId)
+        const productTitles = order.items.map(i => i.products?.title || "Unknown").join(", ")
+ 
+        // ── Email to Customer ──
+        if (user?.email) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: user.email,
+                subject: `Exchange Request Received – Radha Lakshmi (#${orderId})`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:#41334e;padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                            <p style="color:#e0d8e8;margin:4px 0 0;">Exchange Request Received</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <p style="font-size:16px;">Hi <strong>${user.name || "Customer"}</strong>,</p>
+                            <p style="color:#555;">We have received your exchange request. Our team will review it and get back to you shortly.</p>
+ 
+                            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                <tr style="background:#f9f9f9;">
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${orderId}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${productTitles}</td>
+                                </tr>
+                                <tr style="background:#f9f9f9;">
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Reason</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${reason}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Description</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${description}</td>
+                                </tr>
+                            </table>
+ 
+                            <div style="background:#e8f4fd;border-left:4px solid #41334e;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                <strong>What happens next?</strong><br/>
+                                Our team will review your request within <strong>24–48 hours</strong> and notify you via email with the decision.
+                            </div>
+ 
+                            <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+ 
+        // ── Email to Admin ──
+        if (process.env.ADMIN_EMAIL) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: `🔄 Exchange Request – Order #${orderId}`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:#b45309;padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">Exchange Request</h1>
+                            <p style="color:#fde68a;margin:4px 0 0;">A customer has requested a product exchange</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                <tr style="background:#f9f9f9;">
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${orderId}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Customer</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${user?.name || "Unknown"} (${user?.email || "No email"})</td>
+                                </tr>
+                                <tr style="background:#f9f9f9;">
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${productTitles}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Reason</td>
+                                    <td style="padding:10px;border:1px solid #eee;color:#b45309;"><strong>${reason}</strong></td>
+                                </tr>
+                                <tr style="background:#f9f9f9;">
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Description</td>
+                                    <td style="padding:10px;border:1px solid #eee;">${description}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:10px;font-weight:bold;border:1px solid #eee;">Amount</td>
+                                    <td style="padding:10px;border:1px solid #eee;">₹${order.amount}</td>
+                                </tr>
+                            </table>
+ 
+                            ${imageUrl ? `
+                            <div style="margin:16px 0;">
+                                <p style="font-weight:bold;margin-bottom:8px;">Proof Image:</p>
+                                <img src="${imageUrl}" alt="proof" style="max-width:100%;border-radius:8px;border:1px solid #eee;" />
+                            </div>` : ''}
+ 
+                            <p style="color:#555;font-size:13px;margin-top:16px;">
+                                Login to your <a href="${process.env.FRONTEND_URL}/owner" style="color:#41334e;">Dashboard</a> to Accept or Decline this request.
+                            </p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+ 
+        return res.json({ success: true, message: "Exchange request submitted successfully" })
+ 
+    } catch (error) {
+        console.log("requestExchange error:", error.message)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+export const handleExchangeDecision = async (req, res) => {
+    try {
+        const { orderId, decision, adminNote } = req.body
+        // decision: "Exchange Accepted" | "Exchange Declined"
+ 
+        const order = await Order.findById(orderId).populate("items.products")
+        if (!order) return res.json({ success: false, message: "Order not found" })
+ 
+        await Order.findByIdAndUpdate(orderId, {
+            status: decision,
+            adminExchangeNote: adminNote || ""
+        })
+ 
+        const user = await User.findById(order.userId)
+        const productTitles = order.items.map(i => i.products?.title || "Unknown").join(", ")
+        const isAccepted = decision === "Exchange Accepted"
+ 
+        // ── Email to Customer ──
+        if (user?.email) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: user.email,
+                subject: `Exchange Request ${isAccepted ? "Accepted ✅" : "Declined ❌"} – Radha Lakshmi (#${orderId})`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:${isAccepted ? "#41334e" : "#c0392b"};padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                            <p style="color:#e0d8e8;margin:4px 0 0;">Exchange Request ${isAccepted ? "Accepted" : "Declined"}</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <p style="font-size:16px;">Hi <strong>${user.name || "Customer"}</strong>,</p>
+                            <p style="color:#555;">
+                                Your exchange request for <strong>${productTitles}</strong> has been 
+                                <strong style="color:${isAccepted ? "#16a34a" : "#c0392b"};">${isAccepted ? "accepted" : "declined"}</strong>.
+                            </p>
+ 
+                            ${adminNote ? `
+                            <div style="background:${isAccepted ? "#f0fdf4" : "#fff5f5"};border-left:4px solid ${isAccepted ? "#16a34a" : "#c0392b"};padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                <strong>Note from Radha Lakshmi:</strong><br/>
+                                <p style="margin:6px 0 0;color:#555;">${adminNote}</p>
+                            </div>` : ""}
+ 
+                            ${isAccepted ? `
+                            <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                <strong>What happens next?</strong><br/>
+                                Our delivery team will contact you to arrange the exchange. Please keep the original product ready for pickup.
+                            </div>` : `
+                            <div style="background:#fff5f5;border-left:4px solid #c0392b;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                We're sorry we couldn't process your exchange this time. If you have further questions, please contact us via our <a href="${process.env.FRONTEND_URL}/Contact">Contact page</a>.
+                            </div>`}
+ 
+                            <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+ 
+        return res.json({ success: true, message: `Exchange ${isAccepted ? "accepted" : "declined"} successfully` })
+ 
+    } catch (error) {
+        console.log("handleExchangeDecision error:", error.message)
+        res.json({ success: false, message: error.message })
     }
 }
