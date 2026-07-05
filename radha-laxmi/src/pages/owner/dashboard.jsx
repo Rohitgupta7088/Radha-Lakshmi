@@ -288,6 +288,23 @@ const dashboard = () => {
     setExchangeLoading(prev => ({ ...prev, [orderId]: false }))
   }
 
+  const handleClearDashboard = async () => {
+    if (!window.confirm("Clear all delivered & cancelled orders from dashboard? Customer order history will not be affected.")) return
+    try {
+        const { data } = await axios.post('/api/orders/clear-dashboard', {}, {
+            headers: { Authorization: `Bearer ${await getToken()}` }
+        })
+        if (data.success) {
+            toast.success("Dashboard cleared!")
+            getDashboardData()
+        } else {
+            toast.error(data.message)
+        }
+    } catch (err) {
+        toast.error("Something went wrong")
+    }
+  }
+
   useEffect(() => {
     if (user) getDashboardData()
   }, [user])
@@ -464,6 +481,13 @@ const dashboard = () => {
                     <option value='Delivered'>Delivered</option>
                   </select>
                 </div>
+
+                <button
+                      onClick={handleClearDashboard}
+                      className='px-4 py-2 text-sm font-semibold bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all cursor-pointer'
+                  >
+                      Clear Dashboard
+                  </button>
 
                 {/* Exchange Requested panel */}
                 {order.status === 'Exchange Requested' && (

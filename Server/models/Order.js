@@ -41,6 +41,7 @@ const orderSchema = new mongoose.Schema({
     exchangeDescription: {type:String, default:""},
     exchangeImageUrl: {type:String, default:""},
     adminExchangeNote: {type:String, default:""},
+    archivedByAdmin: { type: Boolean, default: false },
 }, {timestamps: true})
 
 const Order = mongoose.models.Order || mongoose.model("Order", orderSchema)

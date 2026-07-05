@@ -13,14 +13,11 @@ import cartRouter from "./routes/cartRoute.js"
 import connectCloudinary from "./config/cloudinary.js"
 import { clerkMiddleware } from "@clerk/express"
 import orderRouter from "./routes/orderRoute.js"
-import { stripeWebhooks } from "./controllers/stripeWebhooks.js"
 
 await connectDB()
 await connectCloudinary()
 
 const app = express()
-
-app.post('/api/stripe', express.raw({type: "application/json"}), stripeWebhooks)
 
 app.use(cors())
 app.use(clerkMiddleware())

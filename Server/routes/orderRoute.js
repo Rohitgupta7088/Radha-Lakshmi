@@ -50,9 +50,9 @@
 import express from "express"
 import { 
     allOrders, cashfreeWebhook, markUPIPaid, 
-    placeOrderCOD, placeOrderCashfree, placeOrderStripe, 
+    placeOrderCOD, placeOrderCashfree, 
     placeOrderUPIManual, updateStatus, userOrders, 
-    verifyCashfreePayment, cancelOrder, requestExchange, handleExchangeDecision
+    verifyCashfreePayment, cancelOrder, requestExchange, handleExchangeDecision, clearDashboard
 } from "../controllers/orderController.js"
 import auth, { authUser } from "../middleware/authMiddleware.js"
 import { upload } from "../middleware/multer.js"
@@ -67,7 +67,6 @@ orderRouter.post('/exchange-decision', authUser, handleExchangeDecision)
 
 // For payment
 orderRouter.post('/cod', authUser, placeOrderCOD)
-orderRouter.post('/stripe', authUser, placeOrderStripe)
 orderRouter.post('/upi', authUser, placeOrderUPIManual)
 orderRouter.post('/cashfree', authUser, placeOrderCashfree)
 orderRouter.post('/cashfree/verify', authUser, verifyCashfreePayment)
@@ -77,5 +76,7 @@ orderRouter.post('/cashfree/webhook', cashfreeWebhook)
 orderRouter.get('/userorders', authUser, userOrders)
 orderRouter.post('/cancel', authUser, cancelOrder)
 orderRouter.post('/exchange', authUser, upload.single('image'), requestExchange)
+
+orderRouter.post('/clear-dashboard', authUser, clearDashboard)
 
 export default orderRouter

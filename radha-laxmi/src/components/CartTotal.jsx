@@ -265,7 +265,7 @@ const CartTotal = () => {
           toast.error(data.message)
         }
       }
-      else if( method === "upi"){
+      else{
         const {data} = await axios.post("/api/orders/cashfree", {items, address: selectedAddress._id}, {
           headers: { Authorization: `Bearer ${await getToken()}` },
         });
@@ -280,17 +280,6 @@ const CartTotal = () => {
           paymentSessionId: data.payment_session_id,
           redirectTarget: "_self",
         })
-      }
-      else{
-        const {data} = await axios.post("/api/orders/stripe", {items, address: selectedAddress._id}, {
-          headers: { Authorization: `Bearer ${await getToken()}` },
-        });
-        if(data.success){
-          window.location.replace(data.url);
-        }
-        else{
-          toast.error(data.message)
-        }
       }
       
     } catch (error) {
@@ -341,11 +330,9 @@ const CartTotal = () => {
             <div onClick={() => setMethod("COD")} className={`${method === "COD" ? "text-[14px] font-[500] bg-gray-500  text-white px-7 py-3 rounded-full transition-all" : "text-[14px] font-[500] ring-1 ring-slate-900/10 px-7 py-3 rounded-full hover:bg-primary transition-all duration-300"} !py-1 text-xs cursor-pointer`}>
               Cash On Delivery
             </div>
-            <div onClick={() => setMethod("stripe")} className={`${method === "stripe" ? "text-[14px] font-[500] bg-gray-500  text-white px-7 py-3 rounded-full transition-all" : "text-[14px] font-[500] ring-1 ring-slate-900/10 px-7 py-3 rounded-full hover:bg-primary transition-all duration-300"} !py-1 text-xs cursor-pointer`}>
-              Stripe
-            </div>
+
             <div onClick={() => setMethod("upi")} className={`${method === "upi" ? "text-[14px] font-[500] bg-gray-500  text-white px-7 py-3 rounded-full transition-all" : "text-[14px] font-[500] ring-1 ring-slate-900/10 px-7 py-3 rounded-full hover:bg-primary transition-all duration-300"} !py-1 text-xs cursor-pointer`}>
-              UPI Payment
+              CashFree Payment
             </div>
           </div>
 

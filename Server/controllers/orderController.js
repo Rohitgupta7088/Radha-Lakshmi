@@ -381,104 +381,6 @@ export const placeOrderUPIManual = async(req, res)=>{
     }
 }
 
-export const placeOrderStripe = async (req, res)=>{
-    try {
-        const {items, address}=req.body;
-        const {userId} = req.auth()
-        const {origin} = req.headers
-
-        if(!items || items.length === 0){
-            return res.json({success: false, message:"Please add Product First"})
-        }
-
-        let subtotal = 0
-        let productData = []
-
-        for(const item of items){
-            const product = await Product.findById(item.products);
-            if(!product){
-                return res.json({success: false, message:"Product not found"})
-            }
-
-            const unitPrice = product.price[item.size]
-            
-            if(!unitPrice){
-                return res.json({success: false, message:"Invalid size Selected"})
-            }
-
-            subtotal += unitPrice * item.quantity
-
-            productData.push({
-                name: product.title,
-                price: unitPrice,
-                quantity: item.quantity,
-            })
-        }
-
-        const taxAmount = subtotal * taxPercentage
-        const totalAmount = subtotal + taxAmount + delivery_charges
-
-        const order = await Order.create({
-            userId,
-            items,
-            amount: totalAmount,
-            address,
-            paymentMethod: "stripe",
-        })
-
-        const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
-
-        let line_items = productData.map(((item)=>({
-            price_data: {
-                currency: currency,
-                product_data:{
-                    name: item.name,
-                },
-                unit_amount: Math.round(item.price * 100),
-            },
-            quantity: item.quantity,
-        })))
-
-        line_items.push({
-            price_data: {
-                currency,
-                product_data: {name: "tax (2%)"},
-                unit_amount: Math.round(taxAmount * 100),
-            },
-            quantity: 1,
-        })
-
-        line_items.push({
-            price_data: {
-                currency,
-                product_data: {name: "Delivery Charges"},
-                unit_amount: Math.round(delivery_charges * 100),
-            },
-            quantity: 1,
-        })
-
-        const session = await stripeInstance.checkout.sessions.create({
-            line_items,
-            mode: "payment",
-            
-            success_url: `${origin}/processing/my-orders`,
-
-            cancel_url: `${origin}/cart`,
-            
-            metadata: {
-                orderId: order._id.toString(),
-                userId,
-            },
-        })
-
-        return res.json({success: true, url: session.url})
-
-    } catch (error) {
-        console.log("Stripe Error:", error.message)
-        res.json({success: false, message:error.message})
-    }
-}
-
 export const placeOrderCashfree = async (req, res)=>{
     try {
         const {items, address} = req.body
@@ -672,7 +574,9 @@ export const userOrders = async (req, res)=>{
 
 export const allOrders = async (req, res)=>{
     try {
-        const orders = await Order.find({$or:[
+        const orders = await Order.find({
+            archivedByAdmin: { $ne: true },
+            $or:[
             {paymentMethod: "COD"},
             {paymentMethod: "UPI"},
             {isPaid: true}
@@ -1156,6 +1060,18 @@ export const handleExchangeDecision = async (req, res) => {
  
     } catch (error) {
         console.log("handleExchangeDecision error:", error.message)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+export const clearDashboard = async (req, res) => {
+    try {
+        await Order.updateMany(
+            { status: { $in: ['Delivered', 'Cancelled'] } },
+            { archivedByAdmin: true }
+        )
+        res.json({ success: true, message: "Dashboard cleared successfully" })
+    } catch (error) {
         res.json({ success: false, message: error.message })
     }
 }
