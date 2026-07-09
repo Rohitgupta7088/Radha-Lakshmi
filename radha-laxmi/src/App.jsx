@@ -20,6 +20,12 @@ import CashfreeReturn from './pages/Cashfreereturn'
 import TermsAndPolicy from './pages/Termsandpolicy'
 import CancelOrder from './pages/CancelOrder'
 import ExchangeOrder from './pages/ExchangeOrder'
+import CreateGiftPool from './pages/CreateGiftPool'
+import GiftPoolPage from './pages/GiftPoolPage'
+import GiftPoolStatus from './pages/GiftPoolStatus'
+import MyGiftPools from './pages/MyGiftPool'
+import GiftOrganizerPaymentReturn from './pages/GiftOrganizerPaymentReturn'
+import GiftContributeReturn from './pages/GiftContributeReturn'
 
 const App = () => {
 
@@ -48,9 +54,9 @@ const App = () => {
                 <Route path='/Contact' element={<Contact/>} />
                 <Route path='/Cart' element={<Cart/>} />
                 <Route path='/my-orders' element={<Myorder/>} />
-                 <Route path='/cancel-order' element={<CancelOrder/>} />
+                <Route path='/cancel-order' element={<CancelOrder/>} />
 
-                 <Route path='/exchange-order' element={<ExchangeOrder/>} />
+                <Route path='/exchange-order' element={<ExchangeOrder/>} />
 
                 <Route path='/processing/:nextUrl' element={<Processing/>} />
                 <Route path='/cashfree-return' element={<CashfreeReturn/>} />
@@ -58,6 +64,18 @@ const App = () => {
                 <Route path='/AddressForm' element={<AddressForm/>} />
 
                 <Route path='/terms' element={<TermsAndPolicy/>} />
+
+                <Route path='/gift/create' element={<CreateGiftPool/>} />
+
+                <Route path='/gift/:poolId' element={<GiftPoolPage/>} />
+                
+                <Route path='/gift/:poolId/status' element={<GiftPoolStatus/>} />
+
+                <Route path='/gift/:poolId/organizer-payment-return' element={<GiftOrganizerPaymentReturn/>} />
+
+                <Route path='/gift/:poolId/contribute-return' element={<GiftContributeReturn/>} />
+
+                <Route path='/gift/my-pools' element={<MyGiftPools/>} />
 
                 <Route path='/owner' element={<Sidebar />}>
                     <Route index element={<Dashboard/>} />

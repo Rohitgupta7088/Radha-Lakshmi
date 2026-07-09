@@ -13,6 +13,8 @@ import cartRouter from "./routes/cartRoute.js"
 import connectCloudinary from "./config/cloudinary.js"
 import { clerkMiddleware } from "@clerk/express"
 import orderRouter from "./routes/orderRoute.js"
+import giftRouter from "./routes/giftRoute.js"
+import { giftCashfreeWebhook } from "./controllers/giftController.js"
 
 await connectDB()
 await connectCloudinary()
@@ -21,6 +23,7 @@ const app = express()
 
 app.use(cors())
 app.use(clerkMiddleware())
+app.use(express.urlencoded({ extended: true }))
 
 // // Log every incoming request so we can see what's hitting the server
 // app.use((req, res, next) => {
@@ -36,14 +39,23 @@ app.use(clerkMiddleware())
 // Webhook route — needs raw body BEFORE express.json()
 app.post("/api/clerk", express.raw({ type: "*/*" }), clerkWebhooks)
 
-// Cashfree webhook — needs raw body for signature verification
+
 app.use('/api/orders/cashfree/webhook', (req, res, next) => {
-    express.raw({ type: '*/*' })(req, res, (err) => {
+    express.raw({ type: '*/*' })     (req, res, (err) => {
         if(err) return next(err)
         req.rawBody = req.body.toString()
         next()
     })
 })
+
+
+app.post('/api/gift/cashfree/webhook', (req, res, next) => {
+    express.raw({ type: '*/*' })(req, res, (err) => {
+        if(err) return next(err)
+        req.rawBody = req.body.toString()
+        next()
+    })
+}, giftCashfreeWebhook)
 
 app.use(express.json())
 
@@ -52,6 +64,7 @@ app.use('/api/products', productRouter)
 app.use('/api/addresses', addressRouter)
 app.use('/api/cart', cartRouter)
 app.use('/api/orders', orderRouter)
+app.use('/api/gift', giftRouter)
 
 app.get('/', (req, res) => {
     res.send("API Successfully Connected")
