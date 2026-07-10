@@ -103,7 +103,7 @@ const giftPoolSchema = new mongoose.Schema({
     // Timeline
     deadline: { type: Date, required: true },
     // pending_payment -> organizer has filled the form but hasn't paid yet (pool/link not live)
-    status: { type: String, enum: ['pending_payment', 'active', 'completed', 'expired', 'ordered'], default: 'pending_payment' },
+    status: { type: String, enum: ['pending_payment', 'active', 'completed', 'expired', 'ordered', 'cancelled'], default: 'pending_payment' },
 
     // Contributors
     contributors: [contributorSchema],

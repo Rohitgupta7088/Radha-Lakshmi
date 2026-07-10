@@ -39,10 +39,16 @@ import {
     extendDeadline,
     getMyPools,
     getMyGiftActivity,
+    getAllGiftPools,
+    processExpiredPools,
 } from "../controllers/giftController.js"
 import { authUser } from "../middleware/authMiddleware.js"
 
 const giftRouter = express.Router()
+
+// Admin routes (owner role required — checked inside controller)
+giftRouter.get('/admin/all-pools', authUser, getAllGiftPools)
+giftRouter.post('/admin/process-expired', authUser, processExpiredPools)
 
 // Organizer routes (auth required)
 giftRouter.post('/create', authUser, createGiftPool)
