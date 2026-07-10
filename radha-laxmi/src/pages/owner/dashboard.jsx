@@ -208,6 +208,16 @@ import { useAppContext } from '../../context/AppContext'
 import { assets } from '../../assets/data'
 import toast from 'react-hot-toast'
 
+const OCCASION_LABEL = { Wedding: 'Wedding', Birthday: 'Birthday', Festival: 'Festival', Anniversary: 'Anniversary', 'Baby Shower': 'Baby Shower' }
+
+const POOL_STATUS_CONFIG = {
+  active:    { label: 'Collecting',   dot: 'bg-amber-500',  card: 'bg-amber-50 border border-amber-200' },
+  completed: { label: 'Goal Reached', dot: 'bg-amber-500',  card: 'bg-amber-50 border border-amber-200' },
+  ordered:   { label: 'Order Placed', dot: 'bg-green-500',  card: 'bg-white border border-gray-200' },
+  cancelled: { label: 'Cancelled',    dot: 'bg-red-500',    card: 'bg-red-50 border border-red-200' },
+  expired:   { label: 'Expired',      dot: 'bg-red-400',    card: 'bg-red-50 border border-red-200' },
+}
+
 const dashboard = () => {
   const { user, currency, axios, getToken } = useAppContext()
 
@@ -218,6 +228,7 @@ const dashboard = () => {
   })
   const [exchangeNotes, setExchangeNotes] = useState({})
   const [exchangeLoading, setExchangeLoading] = useState({})
+  const [giftPools, setGiftPools] = useState([])
 
   const getDashboardData = async () => {
     try {
@@ -231,6 +242,22 @@ const dashboard = () => {
       }
     } catch (error) {
       toast.error(error.message)
+    }
+  }
+
+  const getGiftPoolData = async () => {
+    try {
+      const token = await getToken()
+      const headers = { Authorization: `Bearer ${token}` }
+
+      // Trigger auto-process of expired pools first (no-op if nothing to process)
+      await axios.post('/api/gift/admin/process-expired', {}, { headers })
+
+      // Then fetch all pools
+      const { data } = await axios.get('/api/gift/admin/all-pools', { headers })
+      if (data.success) setGiftPools(data.pools)
+    } catch (error) {
+      console.log('getGiftPoolData error:', error.message)
     }
   }
 
@@ -306,7 +333,10 @@ const dashboard = () => {
   }
 
   useEffect(() => {
-    if (user) getDashboardData()
+    if (user) {
+      getDashboardData()
+      getGiftPoolData()
+    }
   }, [user])
 
   // Sort: Exchange Requested on top, then rest by date
@@ -541,6 +571,146 @@ const dashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* ── Gift Pools Section ── */}
+      {giftPools.length > 0 && (
+        <div className='mt-12'>
+          <div className='mb-4'>
+            <h3 className='font-bold text-2xl text-gray-800'>
+              Gift <span className='font-light text-[#41334e]'>Pools</span>
+            </h3>
+            <div className='w-20 h-[3px] rounded-full bg-[#41334e] mt-1' />
+            <p className='text-sm text-gray-500 mt-1'>
+              {giftPools.filter(p => p.status === 'active' || p.status === 'completed').length} collecting &nbsp;&middot;&nbsp;
+              {giftPools.filter(p => p.status === 'ordered').length} ordered &nbsp;&middot;&nbsp;
+              {giftPools.filter(p => p.status === 'cancelled' || p.status === 'expired').length} cancelled
+            </p>
+          </div>
+
+          {giftPools.map((pool) => {
+            const cfg = POOL_STATUS_CONFIG[pool.status] || { label: pool.status, dot: 'bg-gray-400', card: 'bg-white border border-gray-200' }
+            const paidContributors = pool.contributors?.filter(c => c.isPaid) || []
+            const progress = pool.targetAmount > 0 ? Math.min(Math.round((pool.collectedAmount / pool.targetAmount) * 100), 100) : 0
+            const isCollecting = pool.status === 'active' || pool.status === 'completed'
+            const isCancelled = pool.status === 'cancelled' || pool.status === 'expired'
+
+            return (
+              <div key={pool.poolId} className={`p-4 mb-4 rounded-2xl ${cfg.card}`}>
+
+                {/* Header */}
+                <div className='flex flex-wrap items-start justify-between gap-2 mb-3'>
+                  <div>
+                    <div className='flex items-center gap-2'>
+                      <h5 className='text-[15px] font-bold text-gray-800'>
+                        Gift Pool — {pool.recipientName}
+                      </h5>
+                      <span className='text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#41334e]/10 text-[#41334e]'>
+                        {OCCASION_LABEL[pool.occasion] || pool.occasion}
+                      </span>
+                    </div>
+                    <p className='text-xs text-gray-500 mt-0.5'>
+                      Pool ID: {pool.poolId} &nbsp;&middot;&nbsp; Created: {new Date(pool.createdAt).toDateString()}
+                    </p>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                    <span className={`text-[13px] font-semibold ${isCancelled ? 'text-red-600' : 'text-gray-700'}`}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Products */}
+                <div className='flex flex-wrap gap-2 mb-3'>
+                  {pool.products?.map((item, idx) => (
+                    <div key={idx} className='flex items-center gap-2 bg-white/70 rounded-xl px-2 py-1 border border-gray-100'>
+                      <div className='w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden'>
+                        {item.productId?.images?.[0]
+                          ? <img src={item.productId.images[0]} alt={item.productId.title || ''} className='w-10 h-10 object-contain' />
+                          : <span className='text-[9px] text-gray-400 text-center px-1'>No img</span>
+                        }
+                      </div>
+                      <div>
+                        <p className='text-xs font-semibold text-gray-700 line-clamp-1 max-w-[130px]'>
+                          {item.productId?.title || 'Deleted Product'}
+                        </p>
+                        <p className='text-[10px] text-gray-400'>Size: {item.size} &nbsp;&middot;&nbsp; Qty: {item.quantity}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar */}
+                <div className='mb-3'>
+                  <div className='flex justify-between text-xs text-gray-500 mb-1'>
+                    <span>{currency}{pool.collectedAmount} collected</span>
+                    <span>{currency}{pool.targetAmount} goal</span>
+                  </div>
+                  <div className='w-full bg-gray-200 rounded-full h-2 overflow-hidden'>
+                    <div
+                      className={`h-2 rounded-full transition-all duration-700 ${
+                        isCancelled ? 'bg-red-400' : pool.status === 'ordered' ? 'bg-green-500' : 'bg-[#41334e]'
+                      }`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <p className='text-[10px] text-gray-400 mt-0.5'>{progress}% funded</p>
+                </div>
+
+                {/* Footer info */}
+                <div className='flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 border-t border-gray-200 pt-3'>
+                  <div className='flex flex-col gap-0.5 text-xs text-gray-500'>
+                    <span>
+                      <span className='font-semibold text-gray-700'>Deadline:</span> {new Date(pool.deadline).toDateString()}
+                      {isCollecting && new Date(pool.deadline) > new Date() && (
+                        <span className='ml-2 text-amber-600 font-semibold'>
+                          ({Math.ceil((new Date(pool.deadline) - new Date()) / (1000 * 60 * 60 * 24))} days left)
+                        </span>
+                      )}
+                    </span>
+                    <span>
+                      <span className='font-semibold text-gray-700'>Contributors:</span> {paidContributors.length} paid
+                      {paidContributors.length > 0 && (
+                        <span className='ml-1 text-gray-400'>
+                          ({paidContributors.map(c => c.name).join(', ')})
+                        </span>
+                      )}
+                    </span>
+                    {pool.status === 'ordered' && pool.orderId && (
+                      <span>
+                        <span className='font-semibold text-gray-700'>Order ID:</span> {typeof pool.orderId === 'object' ? pool.orderId._id || pool.orderId : pool.orderId}
+                      </span>
+                    )}
+                    {pool.recipientEmail && (
+                      <span>
+                        <span className='font-semibold text-gray-700'>Recipient Email:</span> {pool.recipientEmail}
+                      </span>
+                    )}
+                    {pool.personalMessage && (
+                      <span>
+                        <span className='font-semibold text-gray-700'>Message:</span>{' '}
+                        <span className='italic'>{pool.personalMessage}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Status badge pill */}
+                  <div className={`text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 ${
+                    isCancelled
+                      ? 'bg-red-100 text-red-600'
+                      : pool.status === 'ordered'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {cfg.label}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
     </div>
   )
 }
