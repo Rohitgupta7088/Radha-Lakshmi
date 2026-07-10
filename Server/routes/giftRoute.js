@@ -38,6 +38,7 @@ import {
     placeGiftOrder,
     extendDeadline,
     getMyPools,
+    getMyGiftActivity,
 } from "../controllers/giftController.js"
 import { authUser } from "../middleware/authMiddleware.js"
 
@@ -49,6 +50,7 @@ giftRouter.post('/:poolId/organizer-payment/verify', authUser, verifyOrganizerPa
 giftRouter.post('/place-order', authUser, placeGiftOrder)
 giftRouter.post('/extend', authUser, extendDeadline)
 giftRouter.get('/my-pools', authUser, getMyPools)
+giftRouter.get('/my-activity', authUser, getMyGiftActivity)
 
 // Public routes (no auth needed)
 giftRouter.get('/:poolId', getGiftPool)

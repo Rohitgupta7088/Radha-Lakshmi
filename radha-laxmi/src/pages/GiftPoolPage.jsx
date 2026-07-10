@@ -241,7 +241,7 @@ const OCCASION_EMOJI = { Wedding: '💍', Birthday: '🎂', Festival: '🪔', An
 const GiftPoolPage = () => {
   const { poolId } = useParams()
   const navigate = useNavigate()
-  const { axios } = useAppContext()
+  const { axios, user } = useAppContext()
 
   const [pool, setPool] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -275,6 +275,7 @@ const GiftPoolPage = () => {
         name: form.name,
         email: form.email,
         amount: Number(form.amount),
+        userId: user?.id || "",
       })
 
       if (!data.success) {

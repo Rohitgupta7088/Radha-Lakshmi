@@ -569,7 +569,7 @@ export const getGiftPool = async (req, res) => {
 export const initContribution = async (req, res) => {
     try {
         const { poolId } = req.params
-        const { name, email, amount } = req.body
+        const { name, email, amount, userId: contributorUserId } = req.body
         const { origin } = req.headers
 
         if (!name?.trim()) return res.json({ success: false, message: "Enter your name" })
@@ -600,6 +600,7 @@ export const initContribution = async (req, res) => {
         pool.contributors.push({
             name,
             email: email || "",
+            userId: contributorUserId || "",
             amount: payAmount,
             paymentMethod: 'cashfree',
             isPaid: false,
@@ -910,6 +911,37 @@ export const getMyPools = async (req, res) => {
 
     } catch (error) {
         console.log("getMyPools error:", error.message)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+// ─────────────────────────────────────────
+// 7. GET MY GIFT ACTIVITY (organizer pools + contributor pools)
+//    Used by /my-orders to show gift pool entries
+// ─────────────────────────────────────────
+export const getMyGiftActivity = async (req, res) => {
+    try {
+        const { userId } = getAuth(req)
+        if (!userId) return res.json({ success: false, message: "Not Authorized" })
+
+        // Pools where user is organizer AND payment is confirmed (status != pending_payment)
+        const organizedPools = await GiftPool.find({
+            organizerUserId: userId,
+            status: { $ne: 'pending_payment' },
+        }).populate("products.productId").sort({ createdAt: -1 })
+
+        // Pools where user contributed as a logged-in contributor (isPaid = true)
+        const contributedPools = await GiftPool.find({
+            organizerUserId: { $ne: userId }, // exclude pools they organized (already above)
+            contributors: {
+                $elemMatch: { userId, isPaid: true }
+            },
+        }).populate("products.productId").sort({ createdAt: -1 })
+
+        res.json({ success: true, organizedPools, contributedPools })
+
+    } catch (error) {
+        console.log("getMyGiftActivity error:", error.message)
         res.json({ success: false, message: error.message })
     }
 }

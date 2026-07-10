@@ -28,8 +28,8 @@ const GiftContributeReturn = () => {
         const { data } = await axios.post(`/api/gift/${poolId}/contribute/verify`, { cashfreeOrderId })
 
         if (data.success && data.isPaid) {
-          setMessage('Thank you! Your contribution has been added 💜')
-          setTimeout(() => navigate(`/gift/${poolId}`), 1500)
+          setMessage('Thank you! Your contribution has been added. Redirecting to your orders...')
+          setTimeout(() => navigate('/my-orders'), 1500)
         }
         else if (data.status === 'pending' && attempts < maxAttempts) {
           setTimeout(poll, 1000)

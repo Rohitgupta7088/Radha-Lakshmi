@@ -58,6 +58,7 @@ import { nanoid } from "nanoid"
 const contributorSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, default: "" },
+    userId: { type: String, default: "" }, // Clerk userId of logged-in contributor (optional)
     amount: { type: Number, required: true },
     paymentMethod: { type: String, required: true },
     isPaid: { type: Boolean, default: false },

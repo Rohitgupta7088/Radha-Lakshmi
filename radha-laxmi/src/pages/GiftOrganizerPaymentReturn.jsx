@@ -29,8 +29,8 @@ const GiftOrganizerPaymentReturn = () => {
 
         if (data.success && data.isPaid) {
           sessionStorage.removeItem('pendingGiftPoolId')
-          setMessage('Payment successful! Your gift pool is now live 🎁')
-          setTimeout(() => navigate(`/gift/${poolId}/status`), 1500)
+          setMessage('Payment successful! Your gift pool is now live. Redirecting to your orders...')
+          setTimeout(() => navigate('/my-orders'), 1500)
         }
         else if (data.status === 'pending' && attempts < maxAttempts) {
           setTimeout(poll, 1000)
