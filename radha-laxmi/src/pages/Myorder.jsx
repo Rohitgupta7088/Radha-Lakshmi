@@ -340,8 +340,15 @@ const Myorder = () => {
         <p className='max-w-lg mt-2'>Discover cosmetic bangles that enhance, deliver radiance and bring confidence to your daily routine</p>
       </div>
 
-      {/* ─── Regular Orders ─── */}
-      {orders.filter(order => order.items.some(item => item.products)).map((order) => (
+      {/* ─── Regular Orders (Gift Pool orders shown first) ─── */}
+      {[...orders]
+        .filter(order => order.items.some(item => item.products))
+        .sort((a, b) => {
+          const aGift = a.paymentMethod === 'Gift Pool' ? 0 : 1
+          const bGift = b.paymentMethod === 'Gift Pool' ? 0 : 1
+          return aGift - bGift
+        })
+        .map((order) => (
         <div key={order._id} className='bg-white p-2 mt-3 rounded-2xl'>
 
           {/* Order items */}
@@ -382,6 +389,9 @@ const Myorder = () => {
               <div className='flex items-center gap-x-2'>
                 <h5 className='text-[14px] font-[500]'>Order-Id:</h5>
                 <p className='text-gray-600 text-xs break-all'>{order._id}</p>
+                {order.paymentMethod === 'Gift Pool' && (
+                  <span className='text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 ml-1'>Gift Pool</span>
+                )}
               </div>
 
               <div className='flex gap-4'>
@@ -430,7 +440,27 @@ const Myorder = () => {
               </div>
 
               {/* ─── Cancel & Exchange Buttons ─── */}
-              {order.status !== 'Cancelled' && order.status !== 'Exchange Requested' && (
+              {order.paymentMethod === 'Gift Pool' ? (
+                <div className='flex flex-col gap-1 items-start lg:items-end'>
+                  <div className='flex flex-wrap gap-2'>
+                    <button
+                      disabled
+                      className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'
+                    >
+                      Cancel Order
+                    </button>
+                    <button
+                      disabled
+                      className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'
+                    >
+                      Exchange
+                    </button>
+                  </div>
+                  <p className='text-[10px] text-gray-400 italic max-w-[220px] leading-tight text-right'>
+                    Note: Exchange &amp; Cancel are not available for Gift Pool orders.
+                  </p>
+                </div>
+              ) : order.status !== 'Cancelled' && order.status !== 'Exchange Requested' && (
                 <div className='flex flex-wrap gap-2'>
 
                   {/* CANCEL BUTTON */}

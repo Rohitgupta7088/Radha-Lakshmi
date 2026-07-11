@@ -339,14 +339,16 @@ const dashboard = () => {
     }
   }, [user])
 
-  // Sort: Exchange Requested on top, then rest by date
+  // Sort: Exchange Requested first, then Gift Pool orders, then the rest by date
+  const orderPriority = (order) => {
+    if (order.status === 'Exchange Requested') return 0
+    if (order.paymentMethod === 'Gift Pool') return 1
+    return 2
+  }
+
   const sortedOrders = [...(dashboardData.orders || [])]
     .filter(order => order.items.some(item => item.products))
-    .sort((a, b) => {
-      if (a.status === 'Exchange Requested' && b.status !== 'Exchange Requested') return -1
-      if (b.status === 'Exchange Requested' && a.status !== 'Exchange Requested') return 1
-      return 0
-    })
+    .sort((a, b) => orderPriority(a) - orderPriority(b))
 
   // Total sales = non-cancelled orders
   const activeSalesCount = sortedOrders.filter(o => o.status !== 'Cancelled').length
@@ -383,6 +385,8 @@ const dashboard = () => {
                 ? 'bg-red-50 border border-red-200'
                 : order.status === 'Exchange Requested'
                 ? 'bg-amber-50 border border-amber-200'
+                : order.paymentMethod === 'Gift Pool'
+                ? 'bg-white border border-purple-200'
                 : 'bg-white'
             }`}
           >

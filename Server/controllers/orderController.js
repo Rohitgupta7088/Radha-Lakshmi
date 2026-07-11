@@ -827,6 +827,10 @@ export const cancelOrder = async (req, res) => {
         if (!order) return res.json({ success: false, message: "Order not found" })
         if (order.userId !== userId) return res.json({ success: false, message: "Unauthorized" })
 
+        if (order.paymentMethod === "Gift Pool") {
+            return res.json({ success: false, message: "Cancellation is not available for Gift Pool orders" })
+        }
+
         const hoursSinceOrder = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60)
         if (hoursSinceOrder > 24) {
             return res.json({ success: false, message: "Cancellation window of 24 hours has passed" })
@@ -1017,6 +1021,10 @@ export const requestExchange = async (req, res) => {
         const order = await Order.findById(orderId).populate("items.products").populate("address")
         if (!order) return res.json({ success: false, message: "Order not found" })
         if (order.userId !== userId) return res.json({ success: false, message: "Unauthorized" })
+ 
+        if (order.paymentMethod === "Gift Pool") {
+            return res.json({ success: false, message: "Exchange is not available for Gift Pool orders" })
+        }
  
         if (order.status !== "Delivered") {
             return res.json({ success: false, message: "Exchange is only available after delivery" })
