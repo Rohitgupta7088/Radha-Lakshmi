@@ -203,13 +203,42 @@ const Myorder = () => {
     }
   }, [user])
 
-  const hoursElapsed = (date) => (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60)
-  const canCancel = (order) => hoursElapsed(order.createdAt) <= 24 && !['Cancelled', 'Delivered', 'Exchange Requested'].includes(order.status)
-  const cancelExpired = (order) => hoursElapsed(order.createdAt) > 24 && !['Cancelled', 'Delivered', 'Exchange Requested'].includes(order.status)
-  const canExchange = (order) => order.status === 'Delivered' && hoursElapsed(order.updatedAt) <= 24
-  const exchangeExpired = (order) => order.status === 'Delivered' && hoursElapsed(order.updatedAt) > 24
-  const handleCancel = (order) => navigate('/cancel-order', { state: order })
-  const handleExchange = (order) => navigate('/exchange-order', { state: order })
+  // ─── Helper: hours elapsed since a given date ───
+  const hoursElapsed = (date) => {
+    return (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60)
+  }
+
+  // ─── Cancel Logic ───
+  // Active: within 24hr of createdAt AND not already cancelled/delivered/exchanged
+  const canCancel = (order) => {
+    const blocked = ['Cancelled', 'Delivered', 'Exchange Requested']
+    return hoursElapsed(order.createdAt) <= 24 && !blocked.includes(order.status)
+  }
+
+  const cancelExpired = (order) => {
+    const blocked = ['Cancelled', 'Delivered', 'Exchange Requested']
+    return hoursElapsed(order.createdAt) > 24 && !blocked.includes(order.status)
+  }
+
+  // ─── Exchange Logic ───
+  // Active: status is "Delivered" AND within 24hr of updatedAt (delivery time)
+  const canExchange = (order) => {
+    return order.status === 'Delivered' && hoursElapsed(order.updatedAt) <= 24
+  }
+
+  const exchangeExpired = (order) => {
+    return order.status === 'Delivered' && hoursElapsed(order.updatedAt) > 24
+  }
+
+  // ─── Cancel Handler — navigate to cancel page with order data ───
+  const handleCancel = (order) => {
+    navigate('/cancel-order', { state: order })
+  }
+
+  // ─── Exchange Handler — navigate to exchange page with order data ───
+  const handleExchange = (order) => {
+    navigate('/exchange-order', { state: order })
+  }
 
   // ─── Gift Pool Card ───
   const GiftPoolCard = ({ pool, role }) => {
@@ -221,11 +250,14 @@ const Myorder = () => {
 
     return (
       <div className='bg-white p-4 mt-3 rounded-2xl border-l-4 border-[#41334e]'>
+        {/* Header row */}
         <div className='flex flex-wrap items-start justify-between gap-2 mb-3'>
           <div className='flex items-center gap-2'>
             <span className='text-xl'>{OCCASION_EMOJI[pool.occasion] || 'gift'}</span>
             <div>
-              <h5 className='text-[15px] font-bold text-gray-800'>Gift Pool for {pool.recipientName}</h5>
+              <h5 className='text-[15px] font-bold text-gray-800'>
+                Gift Pool for {pool.recipientName}
+              </h5>
               <p className='text-xs text-gray-500'>{pool.occasion} &middot; {new Date(pool.createdAt).toDateString()}</p>
             </div>
           </div>
@@ -240,10 +272,15 @@ const Myorder = () => {
           </div>
         </div>
 
+        {/* Products */}
         <div className='flex flex-wrap gap-2 mb-3'>
           {pool.products?.map((item, idx) => (
             <div key={idx} className='flex items-center gap-2 bg-gray-50 rounded-xl px-2 py-1'>
-              <img src={item.productId?.images?.[0] || ''} alt={item.productId?.title || ''} className='w-10 h-10 object-contain rounded-lg bg-gray-100' />
+              <img
+                src={item.productId?.images?.[0] || ''}
+                alt={item.productId?.title || ''}
+                className='w-10 h-10 object-contain rounded-lg bg-gray-100'
+              />
               <div>
                 <p className='text-xs font-semibold text-gray-700 line-clamp-1 max-w-[120px]'>{item.productId?.title}</p>
                 <p className='text-[10px] text-gray-400'>Size: {item.size} &middot; Qty: {item.quantity}</p>
@@ -252,17 +289,22 @@ const Myorder = () => {
           ))}
         </div>
 
+        {/* Progress bar */}
         <div className='mb-3'>
           <div className='flex justify-between text-xs text-gray-500 mb-1'>
             <span>{currency}{pool.collectedAmount} collected</span>
             <span>{currency}{pool.targetAmount} goal</span>
           </div>
           <div className='w-full bg-gray-200 rounded-full h-2 overflow-hidden'>
-            <div className='h-2 rounded-full bg-[#41334e] transition-all duration-700' style={{ width: `${progress}%` }} />
+            <div
+              className='h-2 rounded-full bg-[#41334e] transition-all duration-700'
+              style={{ width: `${progress}%` }}
+            />
           </div>
           <p className='text-[10px] text-gray-400 mt-0.5'>{progress}% funded</p>
         </div>
 
+        {/* Footer info */}
         <div className='flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3'>
           <div className='flex flex-col gap-0.5 text-xs text-gray-500'>
             <span><span className='font-semibold text-gray-700'>Pool ID:</span> {pool.poolId}</span>
@@ -301,14 +343,19 @@ const Myorder = () => {
       {/* ─── Regular Orders ─── */}
       {orders.filter(order => order.items.some(item => item.products)).map((order) => (
         <div key={order._id} className='bg-white p-2 mt-3 rounded-2xl'>
+
+          {/* Order items */}
           {order.items.filter(item => item.products).map((item, idx) => (
             <div key={idx} className='text-gray-700 flex flex-col lg:flex-row gap-4 mb-3'>
               <div className='flex flex-[2] gap-x-2'>
+
                 <div className='flex items-center justify-center bg-gray-200 rounded-xl'>
                   <img src={item.products?.images?.[0] || ''} alt="" className='max-h-20 max-w-20 object-contain' />
                 </div>
+
                 <div className='block w-full'>
                   <h5 className='text-[14px] md:text-[16px] font-bold upperCase line-clamp-1'>{item.products?.title}</h5>
+
                   <div className='flex flex-wrap gap-3 max-sm:gap-y-1 mt-1'>
                     <div className='flex items-center gap-x-2'>
                       <h5 className='text-[14px] font-[500]'>Price:</h5>
@@ -328,12 +375,15 @@ const Myorder = () => {
             </div>
           ))}
 
+          {/* Order footer */}
           <div className='flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-t border-gray-300 pt-3'>
+
             <div className='flex flex-col gap-1'>
               <div className='flex items-center gap-x-2'>
                 <h5 className='text-[14px] font-[500]'>Order-Id:</h5>
                 <p className='text-gray-600 text-xs break-all'>{order._id}</p>
               </div>
+
               <div className='flex gap-4'>
                 <div className='flex items-center gap-x-2'>
                   <h5 className='text-[14px] font-[500]'>Payment Status:</h5>
@@ -344,6 +394,7 @@ const Myorder = () => {
                   </div>
                 </div>
               </div>
+
               <div className='flex gap-4'>
                 <div className='flex items-center gap-x-2'>
                   <h5 className='text-[14px] font-[500]'>Date:</h5>
@@ -356,7 +407,10 @@ const Myorder = () => {
               </div>
             </div>
 
+            {/* Right side: Status + Buttons */}
             <div className='flex flex-col items-start lg:items-end gap-3'>
+
+              {/* Status + Track */}
               <div className='flex gap-3 items-center'>
                 <div className='flex items-center gap-2'>
                   <h5 className='text-[14px] font-[500]'>Status:</h5>
@@ -375,16 +429,25 @@ const Myorder = () => {
                 </button>
               </div>
 
+              {/* ─── Cancel & Exchange Buttons ─── */}
               {order.status !== 'Cancelled' && order.status !== 'Exchange Requested' && (
                 <div className='flex flex-wrap gap-2'>
+
+                  {/* CANCEL BUTTON */}
                   <div className='flex flex-col gap-1'>
                     {canCancel(order) ? (
-                      <button onClick={() => handleCancel(order)} className='text-xs font-[500] bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-sm transition-all cursor-pointer'>
+                      <button
+                        onClick={() => handleCancel(order)}
+                        className='text-xs font-[500] bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-sm transition-all cursor-pointer'
+                      >
                         Cancel Order
                       </button>
                     ) : (
                       <>
-                        <button disabled className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'>
+                        <button
+                          disabled
+                          className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'
+                        >
                           Cancel Order
                         </button>
                         {cancelExpired(order) && (
@@ -395,14 +458,22 @@ const Myorder = () => {
                       </>
                     )}
                   </div>
+
+                  {/* EXCHANGE BUTTON */}
                   <div className='flex flex-col gap-1'>
                     {canExchange(order) ? (
-                      <button onClick={() => handleExchange(order)} className='text-xs font-[500] bg-[#41334e] hover:bg-[#5a4870] text-white px-3 py-1 rounded-sm transition-all cursor-pointer'>
+                      <button
+                        onClick={() => handleExchange(order)}
+                        className='text-xs font-[500] bg-[#41334e] hover:bg-[#5a4870] text-white px-3 py-1 rounded-sm transition-all cursor-pointer'
+                      >
                         Request Exchange
                       </button>
                     ) : (
                       <>
-                        <button disabled className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'>
+                        <button
+                          disabled
+                          className='text-xs font-[500] bg-gray-300 text-gray-400 px-3 py-1 rounded-sm cursor-not-allowed'
+                        >
                           Exchange
                         </button>
                         {exchangeExpired(order) && (
@@ -413,8 +484,10 @@ const Myorder = () => {
                       </>
                     )}
                   </div>
+
                 </div>
               )}
+
             </div>
           </div>
         </div>

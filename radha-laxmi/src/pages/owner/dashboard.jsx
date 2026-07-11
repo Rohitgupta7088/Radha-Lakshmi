@@ -422,22 +422,30 @@ const dashboard = () => {
               </div>
             ))}
 
-            {/* Order footer */}
+                {/* Order footer */}
             <div className='flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-t border-gray-300 pt-3'>
 
               <div className='flex flex-col gap-1'>
                 <div className='flex items-center gap-x-2'>
                   <h5 className='text-[14px] font-[500]'>Order-Id:</h5>
                   <p className='text-gray-600 text-xs break-all'>{order._id}</p>
+                  {order.paymentMethod === 'Gift Pool' && (
+                    <span className='text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 ml-1'>Gift Pool</span>
+                  )}
                 </div>
 
                 <div className='flex gap-4'>
                   <div className='flex items-center gap-x-2'>
                     <h5 className='text-[14px] font-[500]'>Customer:</h5>
-                    <p className='text-gray-600 text-sm'>{order.address.firstName} {order.address.lastName}</p>
+                    <p className='text-gray-600 text-sm'>
+                      {order.address
+                        ? `${order.address.firstName || ''} ${order.address.lastName || ''}`.trim() || 'N/A'
+                        : order.paymentMethod === 'Gift Pool' ? '(Gift Pool – address pending)' : 'N/A'
+                      }
+                    </p>
                     <div className='flex items-center gap-x-2'>
                       <h5 className='text-[14px] font-[500]'>Contact:</h5>
-                      <p className='text-gray-600 text-sm'>{order.address.phone}</p>
+                      <p className='text-gray-600 text-sm'>{order.address?.phone || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -446,7 +454,10 @@ const dashboard = () => {
                   <div className='flex items-center gap-x-2'>
                     <h5 className='text-[14px] font-[500]'>Address:</h5>
                     <p className='text-gray-600 text-sm'>
-                      {order.address.street}, {order.address.city}, {order.address.state}, {order.address.country}, {order.address.zipcode}
+                      {order.address
+                        ? `${order.address.street || ''}, ${order.address.city || ''}, ${order.address.state || ''}, ${order.address.country || ''}, ${order.address.zipcode || ''}`
+                        : order.paymentMethod === 'Gift Pool' ? 'Organizer will confirm delivery address' : 'No address'
+                      }
                     </p>
                   </div>
                 </div>

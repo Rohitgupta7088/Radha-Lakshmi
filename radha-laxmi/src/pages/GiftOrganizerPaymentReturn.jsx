@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 
+// Cashfree redirects the organizer back here after their upfront-contribution payment attempt.
+// We poll our backend to confirm the payment, which then activates the pool and emails the organizer.
+
 const GiftOrganizerPaymentReturn = () => {
   const { poolId } = useParams()
   const { navigate, axios, getToken } = useAppContext()
@@ -15,7 +18,7 @@ const GiftOrganizerPaymentReturn = () => {
     }
 
     let attempts = 0
-    const maxAttempts = 10
+    const maxAttempts = 10 // poll up to 10 times (10 seconds total)
 
     const poll = async () => {
       try {
@@ -27,7 +30,7 @@ const GiftOrganizerPaymentReturn = () => {
         if (data.success && data.isPaid) {
           sessionStorage.removeItem('pendingGiftPoolId')
           setMessage('Payment successful! Your gift pool is now live. Redirecting to your orders...')
-          setTimeout(() => navigate('/my-orders'), 1500)   // <-- changed
+          setTimeout(() => navigate('/my-orders'), 1500)
         }
         else if (data.status === 'pending' && attempts < maxAttempts) {
           setTimeout(poll, 1000)

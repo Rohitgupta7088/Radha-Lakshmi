@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 
+// Cashfree redirects the contributor back here after their payment attempt.
+// We poll our backend to confirm the payment, which then updates the pool and emails both parties.
+
 const GiftContributeReturn = () => {
   const { poolId } = useParams()
   const [searchParams] = useSearchParams()
@@ -26,7 +29,7 @@ const GiftContributeReturn = () => {
 
         if (data.success && data.isPaid) {
           setMessage('Thank you! Your contribution has been added. Redirecting to your orders...')
-          setTimeout(() => navigate('/my-orders'), 1500)   // <-- changed
+          setTimeout(() => navigate('/my-orders'), 1500)
         }
         else if (data.status === 'pending' && attempts < maxAttempts) {
           setTimeout(poll, 1000)
