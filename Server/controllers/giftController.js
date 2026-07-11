@@ -860,6 +860,25 @@ export const placeGiftOrder = async (req, res) => {
             `)
         }
 
+        // Email to admin
+        if (process.env.ADMIN_EMAIL) {
+            await sendEmail(process.env.ADMIN_EMAIL, `[Admin] Gift Pool Order Placed – Pool ${pool.poolId}`, `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #eee;border-radius:10px;">
+                    <h2 style="color:#41334e;">Gift Pool Order Placed</h2>
+                    <p><strong>Pool ID:</strong> ${pool.poolId}</p>
+                    <p><strong>Order ID:</strong> ${order._id}</p>
+                    <p><strong>Recipient:</strong> ${pool.recipientName}</p>
+                    <p><strong>Occasion:</strong> ${pool.occasion}</p>
+                    <p><strong>Gift:</strong> ${productNames}</p>
+                    <p><strong>Amount Collected:</strong> &#8377;${pool.collectedAmount} / &#8377;${pool.targetAmount}</p>
+                    <p><strong>Contributors (${paidContributors.length}):</strong> ${paidContributors.map(c => c.name).join(', ')}</p>
+                    <p><strong>Organizer Email:</strong> ${organizer?.email || 'N/A'}</p>
+                    <p><strong>Placed At:</strong> ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</p>
+                    <p style="color:#888;font-size:12px;">Login to your <a href="${FRONTEND_URL}/owner" style="color:#41334e;">Dashboard</a> to process this gift order.</p>
+                </div>
+            `)
+        }
+
         res.json({ success: true, message: "Gift order placed successfully!", orderId: order._id })
 
     } catch (error) {

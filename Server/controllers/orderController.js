@@ -229,6 +229,7 @@ import { MessageAttempt } from "svix/dist/api/messageAttempt.js"
 import Order from "../models/Order.js"
 import Product from "../models/Product.js"
 import User from "../models/User.js"
+import GiftPool from "../models/GiftPool.js"
 import stripe from "stripe"
 import crypto from "crypto"
 import { Cashfree, CFEnvironment } from "cashfree-pg"
@@ -287,22 +288,61 @@ export const placeOrderCOD = async(req, res)=>{
         const productTitles = populatedOrder.items.map(item => item.products?.title || "Unknown").join(", ")
         const addressString = populatedOrder.address ? `${populatedOrder.address.street || "N/A"}, ${populatedOrder.address.city || "N/A"}, ${populatedOrder.address.state || "N/A"}, ${populatedOrder.address.country || "N/A"}` : "No Address";
 
-        const mailOptions = {
+        // ── Email to Customer ──
+        await transporter.sendMail({
             from: process.env.SMTP_SENDER_EMAIL,
             to: user.email,
-            subject: "Order Details (COD)",
+            subject: `Order Placed – Radha Lakshmi (#${populatedOrder._id})`,
             html: `
-                <h2>Your Delivery Details</h2>
-                <p>Thank You for your Order! Below are your Order details:</p>
-                <li><strong>Order ID:</strong> ${populatedOrder._id}</li>
-                <li><strong>Products Name: </strong> ${productTitles}</li>
-                <li><strong>Address:</strong> ${addressString}</li>
-                <li><strong>Total Amount:</strong> ${process.env.CURRENCY || "$"}${populatedOrder.amount}</li>
-                <p>You will get your delivery in 1-2 Days. Pay on delivery.</p>
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                    <div style="background:#41334e;padding:24px;text-align:center;">
+                        <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                        <p style="color:#e0d8e8;margin:4px 0 0;">Order Confirmed!</p>
+                    </div>
+                    <div style="padding:28px;">
+                        <p>Hi <strong>${user.name || "Customer"}</strong>,</p>
+                        <p>Thank you for your order! Below are your order details:</p>
+                        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Total Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Payment Method</td><td style="padding:10px;border:1px solid #eee;">COD (Cash on Delivery)</td></tr>
+                        </table>
+                        <p style="color:#555;">You will receive your delivery in 1–2 days. Pay on delivery.</p>
+                        <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                    </div>
+                </div>
             `
-        }
+        })
 
-        await transporter.sendMail(mailOptions)
+        // ── Email to Admin ──
+        if (process.env.ADMIN_EMAIL) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: `New COD Order Placed – #${populatedOrder._id}`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:#41334e;padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">New COD Order</h1>
+                            <p style="color:#e0d8e8;margin:4px 0 0;">A new Cash on Delivery order has been placed</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Customer</td><td style="padding:10px;border:1px solid #eee;">${user.name || "Unknown"} (${user.email})</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Placed At</td><td style="padding:10px;border:1px solid #eee;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td></tr>
+                            </table>
+                            <p style="color:#555;font-size:13px;margin-top:16px;">Login to your <a href="${process.env.FRONTEND_URL}/owner" style="color:#41334e;">Dashboard</a> to process this order.</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
 
         return res.json({success: true, message:"Order Placed"})
 
@@ -356,22 +396,63 @@ export const placeOrderUPIManual = async(req, res)=>{
         const productTitles = populatedOrder.items.map(item => item.products?.title || "Unknown").join(", ")
         const addressString = populatedOrder.address ? `${populatedOrder.address.street || "N/A"}, ${populatedOrder.address.city || "N/A"}, ${populatedOrder.address.state || "N/A"}, ${populatedOrder.address.country || "N/A"}` : "No Address";
 
-        const mailOptions = {
+        // ── Email to Customer ──
+        await transporter.sendMail({
             from: process.env.SMTP_SENDER_EMAIL,
             to: user.email,
-            subject: "Order Details (UPI Payment - Pending Confirmation)",
+            subject: `Order Placed – Radha Lakshmi (#${populatedOrder._id})`,
             html: `
-                <h2>Your Delivery Details</h2>
-                <p>Thank You for your Order! We've received your UPI payment claim and will confirm it shortly. Below are your Order details:</p>
-                <li><strong>Order ID:</strong> ${populatedOrder._id}</li>
-                <li><strong>Products Name: </strong> ${productTitles}</li>
-                <li><strong>Address:</strong> ${addressString}</li>
-                <li><strong>Total Amount:</strong> ${process.env.CURRENCY || "$"}${populatedOrder.amount}</li>
-                <p>Your order will be processed once payment is confirmed.</p>
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                    <div style="background:#41334e;padding:24px;text-align:center;">
+                        <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                        <p style="color:#e0d8e8;margin:4px 0 0;">Order Received – Pending Payment Confirmation</p>
+                    </div>
+                    <div style="padding:28px;">
+                        <p>Hi <strong>${user.name || "Customer"}</strong>,</p>
+                        <p>We have received your order and your UPI payment claim. We will confirm payment shortly. Below are your order details:</p>
+                        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Total Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Payment Method</td><td style="padding:10px;border:1px solid #eee;">UPI</td></tr>
+                        </table>
+                        <p style="color:#555;">Your order will be processed once payment is confirmed.</p>
+                        <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                    </div>
+                </div>
             `
-        }
+        })
 
-        await transporter.sendMail(mailOptions)
+        // ── Email to Admin ──
+        if (process.env.ADMIN_EMAIL) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: `New UPI Order Placed – #${populatedOrder._id}`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:#41334e;padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">New UPI Order</h1>
+                            <p style="color:#e0d8e8;margin:4px 0 0;">UPI payment confirmation required</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Customer</td><td style="padding:10px;border:1px solid #eee;">${user.name || "Unknown"} (${user.email})</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Placed At</td><td style="padding:10px;border:1px solid #eee;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td></tr>
+                            </table>
+                            <div style="background:#fff8e1;border-left:4px solid #f0a500;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                <strong>Action Required:</strong> Please verify the UPI payment and mark it as paid in the <a href="${process.env.FRONTEND_URL}/owner" style="color:#41334e;">Dashboard</a>.
+                            </div>
+                        </div>
+                    </div>
+                `
+            })
+        }
 
         return res.json({success: true, message:"Order Placed - Pending Payment Confirmation"})
 
@@ -537,20 +618,63 @@ const sendOrderEmail = async (orderId, methodLabel)=>{
             ? `${populatedOrder.address.street || "N/A"}, ${populatedOrder.address.city || "N/A"}, ${populatedOrder.address.state || "N/A"}, ${populatedOrder.address.country || "N/A"}`
             : "No Address"
 
+        // ── Email to Customer ──
         await transporter.sendMail({
             from: process.env.SMTP_SENDER_EMAIL,
             to: user.email,
-            subject: `Order Details (${methodLabel})`,
+            subject: `Order Placed – Radha Lakshmi (#${populatedOrder._id})`,
             html: `
-                <h2>Your Delivery Details</h2>
-                <p>Thank You for your Order! Your payment was successful. Below are your Order details:</p>
-                <li><strong>Order ID:</strong> ${populatedOrder._id}</li>
-                <li><strong>Products Name:</strong> ${productTitles}</li>
-                <li><strong>Address:</strong> ${addressString}</li>
-                <li><strong>Total Amount:</strong> ${process.env.CURRENCY || "₹"}${populatedOrder.amount}</li>
-                <p>You will get your delivery in 1-2 Days.</p>
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                    <div style="background:#41334e;padding:24px;text-align:center;">
+                        <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                        <p style="color:#e0d8e8;margin:4px 0 0;">Order Confirmed!</p>
+                    </div>
+                    <div style="padding:28px;">
+                        <p>Hi <strong>${user.name || "Customer"}</strong>,</p>
+                        <p>Thank you for your order! Your payment via <strong>${methodLabel}</strong> was successful. Below are your order details:</p>
+                        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Total Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Payment Method</td><td style="padding:10px;border:1px solid #eee;">${methodLabel}</td></tr>
+                        </table>
+                        <p style="color:#555;">You will receive your delivery in 1–2 days.</p>
+                        <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                    </div>
+                </div>
             `
         })
+
+        // ── Email to Admin ──
+        if (process.env.ADMIN_EMAIL) {
+            await transporter.sendMail({
+                from: process.env.SMTP_SENDER_EMAIL,
+                to: process.env.ADMIN_EMAIL,
+                subject: `New Order Placed – #${populatedOrder._id}`,
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                        <div style="background:#41334e;padding:24px;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:22px;">New Order Received</h1>
+                            <p style="color:#e0d8e8;margin:4px 0 0;">A new order has been placed</p>
+                        </div>
+                        <div style="padding:28px;">
+                            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${populatedOrder._id}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Customer</td><td style="padding:10px;border:1px solid #eee;">${user.name || "Unknown"} (${user.email})</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Products</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Address</td><td style="padding:10px;border:1px solid #eee;">${addressString}</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Amount</td><td style="padding:10px;border:1px solid #eee;">${process.env.CURRENCY || "₹"}${populatedOrder.amount}</td></tr>
+                                <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Payment Method</td><td style="padding:10px;border:1px solid #eee;">${methodLabel}</td></tr>
+                                <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Placed At</td><td style="padding:10px;border:1px solid #eee;">${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td></tr>
+                            </table>
+                            <p style="color:#555;font-size:13px;margin-top:16px;">Login to your <a href="${process.env.FRONTEND_URL}/owner" style="color:#41334e;">Dashboard</a> to process this order.</p>
+                        </div>
+                    </div>
+                `
+            })
+        }
+
     } catch (err) {
         console.log("Email Error:", err.message)
     }
@@ -835,6 +959,44 @@ export const cancelOrder = async (req, res) => {
                     </div>
                 `
             })
+        }
+
+        // ── If this is a Gift Pool order, also notify all paid contributors ──
+        if (order.paymentMethod === 'Gift Pool') {
+            const giftPool = await GiftPool.findOne({ orderId: orderId })
+            if (giftPool) {
+                const paidContributors = giftPool.contributors.filter(c => c.isPaid && !c.isOrganizer && c.email)
+                for (const contributor of paidContributors) {
+                    await transporter.sendMail({
+                        from: process.env.SMTP_SENDER_EMAIL,
+                        to: contributor.email,
+                        subject: `Gift Pool Order Cancelled – Radha Lakshmi`,
+                        html: `
+                            <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;border:1px solid #eee;border-radius:10px;overflow:hidden;">
+                                <div style="background:#c0392b;padding:24px;text-align:center;">
+                                    <h1 style="color:#fff;margin:0;font-size:22px;">Radha Lakshmi</h1>
+                                    <p style="color:#f5c6c2;margin:4px 0 0;">Gift Pool Order Cancelled</p>
+                                </div>
+                                <div style="padding:28px;">
+                                    <p>Hi <strong>${contributor.name}</strong>,</p>
+                                    <p>The gift pool order for <strong>${giftPool.recipientName}</strong> that you contributed to has been cancelled.</p>
+                                    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Pool ID</td><td style="padding:10px;border:1px solid #eee;">${giftPool.poolId}</td></tr>
+                                        <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${orderId}</td></tr>
+                                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Gift</td><td style="padding:10px;border:1px solid #eee;">${productTitles}</td></tr>
+                                        <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Your Contribution</td><td style="padding:10px;border:1px solid #eee;">&#8377;${contributor.amount}</td></tr>
+                                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Cancellation Reason</td><td style="padding:10px;border:1px solid #eee;">${reason || "Not specified"}</td></tr>
+                                    </table>
+                                    <div style="background:#fff8e1;border-left:4px solid #f0a500;padding:12px 16px;border-radius:4px;margin:16px 0;">
+                                        <strong>Refund Notice:</strong> Since this was a paid Gift Pool order, your contribution refund will be processed within <strong>5–7 business days</strong>.
+                                    </div>
+                                    <p style="color:#999;font-size:13px;margin-top:24px;">— Team Radha Lakshmi</p>
+                                </div>
+                            </div>
+                        `
+                    })
+                }
+            }
         }
 
         return res.json({ success: true, message: "Order cancelled successfully" })
