@@ -16,5 +16,11 @@
             "src": "/(.*)",
             "dest": "server.js"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/gift/cron/process-expired",
+            "schedule": "0 3 * * *"
+        }
     ]
 }

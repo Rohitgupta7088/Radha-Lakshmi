@@ -990,149 +990,201 @@ export const getAllGiftPools = async (req, res) => {
 //    - If deadline passed & goal NOT met → cancel pool, notify all
 //    Called by the admin dashboard on load (no cron needed)
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// 9. PROCESS EXPIRED POOLS (core logic — reusable)
+//    - If deadline passed & goal met  → place order automatically, notify all
+//    - If deadline passed & goal NOT met → cancel pool, notify all
+//    Called by: (a) the admin dashboard on load, (b) the node-cron job in
+//    server.js which runs automatically every CRON_INTERVAL_MINUTES minutes.
+// ─────────────────────────────────────────
+export const runExpiredPoolsCheck = async () => {
+    const now = new Date()
+
+    // Find all active / completed pools whose deadline has passed
+    const expiredPools = await GiftPool.find({
+        status: { $in: ['active', 'completed'] },
+        deadline: { $lt: now },
+    }).populate("products.productId")
+
+    let processed = 0
+
+    for (const pool of expiredPools) {
+        const productNames = pool.products.map(p => p.productId?.title || "Bangle").join(", ")
+        const paidContributors = pool.contributors.filter(c => c.isPaid)
+        const organizer = await User.findById(pool.organizerUserId)
+
+        // ── Goal met: auto-place order ──
+        if (pool.collectedAmount >= pool.targetAmount) {
+            // Create the order
+            const items = pool.products.map(p => ({
+                products: p.productId._id,
+                quantity: p.quantity,
+                size: p.size,
+            }))
+
+            const order = await Order.create({
+                userId: pool.organizerUserId,
+                items,
+                amount: pool.targetAmount,
+                address: null,
+                status: 'Order Placed',
+                paymentMethod: 'Gift Pool',
+                isPaid: true,
+            })
+
+            pool.orderId = order._id
+            pool.status = 'ordered'
+            await pool.save()
+
+            const orderHtml = (name) => `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:28px;border:1px solid #eee;border-radius:10px;">
+                    <div style="background:#41334e;padding:24px;text-align:center;border-radius:10px 10px 0 0;margin:-28px -28px 28px;">
+                        <h1 style="color:#fff;margin:0;font-size:22px;">Gift Order Placed!</h1>
+                    </div>
+                    <p>Hi <strong>${name}</strong>,</p>
+                    <p>The gift pool for <strong>${pool.recipientName}</strong> reached its goal and the order has been placed automatically.</p>
+                    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${order._id}</td></tr>
+                        <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Gift</td><td style="padding:10px;border:1px solid #eee;">${productNames}</td></tr>
+                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Total Collected</td><td style="padding:10px;border:1px solid #eee;">&#8377;${pool.collectedAmount}</td></tr>
+                        <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Recipient</td><td style="padding:10px;border:1px solid #eee;">${pool.recipientName}</td></tr>
+                    </table>
+                    ${contributorWallHtml(paidContributors)}
+                    <p style="color:#999;font-size:13px;margin-top:24px;">&#8212; Team Radha Lakshmi</p>
+                </div>
+            `
+
+            // Notify organizer
+            if (organizer?.email) await sendEmail(organizer.email, `Gift Order Placed – Radha Lakshmi`, orderHtml(organizer.username || "Organizer"))
+
+            // Notify each paid contributor who has an email
+            for (const c of paidContributors) {
+                if (!c.email || c.isOrganizer) continue
+                await sendEmail(c.email, `Gift Order Placed – Radha Lakshmi`, orderHtml(c.name))
+            }
+
+            // Notify admin
+            if (process.env.ADMIN_EMAIL) {
+                await sendEmail(process.env.ADMIN_EMAIL, `[Admin] Gift Pool Order Placed – Pool ${pool.poolId}`, `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #eee;border-radius:10px;">
+                        <h2 style="color:#41334e;">Gift Pool Order Placed</h2>
+                        <p><strong>Pool ID:</strong> ${pool.poolId}</p>
+                        <p><strong>Recipient:</strong> ${pool.recipientName}</p>
+                        <p><strong>Occasion:</strong> ${pool.occasion}</p>
+                        <p><strong>Gift:</strong> ${productNames}</p>
+                        <p><strong>Amount Collected:</strong> &#8377;${pool.collectedAmount} / &#8377;${pool.targetAmount}</p>
+                        <p><strong>Contributors:</strong> ${paidContributors.length}</p>
+                        <p><strong>Order ID:</strong> ${order._id}</p>
+                        <p><strong>Organizer Email:</strong> ${organizer?.email || 'N/A'}</p>
+                        <p style="color:#888;font-size:12px;">Please contact the organizer to confirm the delivery address.</p>
+                    </div>
+                `)
+            }
+
+        } else {
+            // ── Goal NOT met: cancel pool ──
+            pool.status = 'cancelled'
+            await pool.save()
+
+            const cancelHtml = (name, amount) => `
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:28px;border:1px solid #eee;border-radius:10px;">
+                    <div style="background:#dc2626;padding:24px;text-align:center;border-radius:10px 10px 0 0;margin:-28px -28px 28px;">
+                        <h1 style="color:#fff;margin:0;font-size:22px;">Gift Pool Cancelled</h1>
+                    </div>
+                    <p>Hi <strong>${name}</strong>,</p>
+                    <p>Unfortunately the gift pool for <strong>${pool.recipientName}</strong> did not reach its goal of <strong>&#8377;${pool.targetAmount}</strong> by the deadline.</p>
+                    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                        <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Pool ID</td><td style="padding:10px;border:1px solid #eee;">${pool.poolId}</td></tr>
+                        <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Collected</td><td style="padding:10px;border:1px solid #eee;">&#8377;${pool.collectedAmount} of &#8377;${pool.targetAmount}</td></tr>
+                        ${amount ? `<tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Your Contribution</td><td style="padding:10px;border:1px solid #eee;">&#8377;${amount}</td></tr>` : ''}
+                    </table>
+                    <p>If a refund is due, our team will process it shortly. We apologise for any inconvenience.</p>
+                    <p style="color:#999;font-size:13px;margin-top:24px;">&#8212; Team Radha Lakshmi</p>
+                </div>
+            `
+
+            // Notify organizer
+            if (organizer?.email) await sendEmail(organizer.email, `Gift Pool Cancelled – Radha Lakshmi`, cancelHtml(organizer.username || "Organizer", pool.organizerPayment?.amount))
+
+            // Notify each paid contributor
+            for (const c of paidContributors) {
+                if (!c.email || c.isOrganizer) continue
+                await sendEmail(c.email, `Gift Pool Cancelled – Radha Lakshmi`, cancelHtml(c.name, c.amount))
+            }
+
+            // Notify admin
+            if (process.env.ADMIN_EMAIL) {
+                await sendEmail(process.env.ADMIN_EMAIL, `[Admin] Gift Pool Cancelled – Pool ${pool.poolId}`, `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #eee;border-radius:10px;">
+                        <h2 style="color:#dc2626;">Gift Pool Cancelled</h2>
+                        <p><strong>Pool ID:</strong> ${pool.poolId}</p>
+                        <p><strong>Recipient:</strong> ${pool.recipientName}</p>
+                        <p><strong>Occasion:</strong> ${pool.occasion}</p>
+                        <p><strong>Goal:</strong> &#8377;${pool.targetAmount}</p>
+                        <p><strong>Collected:</strong> &#8377;${pool.collectedAmount}</p>
+                        <p><strong>Contributors who paid:</strong> ${paidContributors.length}</p>
+                        <p><strong>Organizer Email:</strong> ${organizer?.email || 'N/A'}</p>
+                        <p style="color:#888;font-size:12px;">Please process any pending refunds.</p>
+                    </div>
+                `)
+            }
+        }
+
+        processed++
+    }
+
+    return processed
+}
+
+// ─────────────────────────────────────────
+// 9b. ADMIN ROUTE: PROCESS EXPIRED POOLS (manual trigger / dashboard-load trigger)
+// ─────────────────────────────────────────
 export const processExpiredPools = async (req, res) => {
     try {
         if (req.user?.role !== 'owner') return res.json({ success: false, message: "Not Authorized" })
 
-        const now = new Date()
-
-        // Find all active / completed pools whose deadline has passed
-        const expiredPools = await GiftPool.find({
-            status: { $in: ['active', 'completed'] },
-            deadline: { $lt: now },
-        }).populate("products.productId")
-
-        let processed = 0
-
-        for (const pool of expiredPools) {
-            const productNames = pool.products.map(p => p.productId?.title || "Bangle").join(", ")
-            const paidContributors = pool.contributors.filter(c => c.isPaid)
-            const organizer = await User.findById(pool.organizerUserId)
-
-            // ── Goal met: auto-place order ──
-            if (pool.collectedAmount >= pool.targetAmount) {
-                // Create the order
-                const items = pool.products.map(p => ({
-                    products: p.productId._id,
-                    quantity: p.quantity,
-                    size: p.size,
-                }))
-
-                const order = await Order.create({
-                    userId: pool.organizerUserId,
-                    items,
-                    amount: pool.targetAmount,
-                    address: null,
-                    status: 'Order Placed',
-                    paymentMethod: 'Gift Pool',
-                    isPaid: true,
-                })
-
-                pool.orderId = order._id
-                pool.status = 'ordered'
-                await pool.save()
-
-                const orderHtml = (name) => `
-                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:28px;border:1px solid #eee;border-radius:10px;">
-                        <div style="background:#41334e;padding:24px;text-align:center;border-radius:10px 10px 0 0;margin:-28px -28px 28px;">
-                            <h1 style="color:#fff;margin:0;font-size:22px;">Gift Order Placed!</h1>
-                        </div>
-                        <p>Hi <strong>${name}</strong>,</p>
-                        <p>The gift pool for <strong>${pool.recipientName}</strong> reached its goal and the order has been placed automatically.</p>
-                        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Order ID</td><td style="padding:10px;border:1px solid #eee;">${order._id}</td></tr>
-                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Gift</td><td style="padding:10px;border:1px solid #eee;">${productNames}</td></tr>
-                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Total Collected</td><td style="padding:10px;border:1px solid #eee;">&#8377;${pool.collectedAmount}</td></tr>
-                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Recipient</td><td style="padding:10px;border:1px solid #eee;">${pool.recipientName}</td></tr>
-                        </table>
-                        ${contributorWallHtml(paidContributors)}
-                        <p style="color:#999;font-size:13px;margin-top:24px;">&#8212; Team Radha Lakshmi</p>
-                    </div>
-                `
-
-                // Notify organizer
-                if (organizer?.email) await sendEmail(organizer.email, `Gift Order Placed – Radha Lakshmi`, orderHtml(organizer.username || "Organizer"))
-
-                // Notify each paid contributor who has an email
-                for (const c of paidContributors) {
-                    if (!c.email || c.isOrganizer) continue
-                    await sendEmail(c.email, `Gift Order Placed – Radha Lakshmi`, orderHtml(c.name))
-                }
-
-                // Notify admin
-                if (process.env.ADMIN_EMAIL) {
-                    await sendEmail(process.env.ADMIN_EMAIL, `[Admin] Gift Pool Order Placed – Pool ${pool.poolId}`, `
-                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #eee;border-radius:10px;">
-                            <h2 style="color:#41334e;">Gift Pool Order Placed</h2>
-                            <p><strong>Pool ID:</strong> ${pool.poolId}</p>
-                            <p><strong>Recipient:</strong> ${pool.recipientName}</p>
-                            <p><strong>Occasion:</strong> ${pool.occasion}</p>
-                            <p><strong>Gift:</strong> ${productNames}</p>
-                            <p><strong>Amount Collected:</strong> &#8377;${pool.collectedAmount} / &#8377;${pool.targetAmount}</p>
-                            <p><strong>Contributors:</strong> ${paidContributors.length}</p>
-                            <p><strong>Order ID:</strong> ${order._id}</p>
-                            <p><strong>Organizer Email:</strong> ${organizer?.email || 'N/A'}</p>
-                            <p style="color:#888;font-size:12px;">Please contact the organizer to confirm the delivery address.</p>
-                        </div>
-                    `)
-                }
-
-            } else {
-                // ── Goal NOT met: cancel pool ──
-                pool.status = 'cancelled'
-                await pool.save()
-
-                const cancelHtml = (name, amount) => `
-                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:28px;border:1px solid #eee;border-radius:10px;">
-                        <div style="background:#dc2626;padding:24px;text-align:center;border-radius:10px 10px 0 0;margin:-28px -28px 28px;">
-                            <h1 style="color:#fff;margin:0;font-size:22px;">Gift Pool Cancelled</h1>
-                        </div>
-                        <p>Hi <strong>${name}</strong>,</p>
-                        <p>Unfortunately the gift pool for <strong>${pool.recipientName}</strong> did not reach its goal of <strong>&#8377;${pool.targetAmount}</strong> by the deadline.</p>
-                        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-                            <tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Pool ID</td><td style="padding:10px;border:1px solid #eee;">${pool.poolId}</td></tr>
-                            <tr><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Collected</td><td style="padding:10px;border:1px solid #eee;">&#8377;${pool.collectedAmount} of &#8377;${pool.targetAmount}</td></tr>
-                            ${amount ? `<tr style="background:#f9f9f9;"><td style="padding:10px;font-weight:bold;border:1px solid #eee;">Your Contribution</td><td style="padding:10px;border:1px solid #eee;">&#8377;${amount}</td></tr>` : ''}
-                        </table>
-                        <p>If a refund is due, our team will process it shortly. We apologise for any inconvenience.</p>
-                        <p style="color:#999;font-size:13px;margin-top:24px;">&#8212; Team Radha Lakshmi</p>
-                    </div>
-                `
-
-                // Notify organizer
-                if (organizer?.email) await sendEmail(organizer.email, `Gift Pool Cancelled – Radha Lakshmi`, cancelHtml(organizer.username || "Organizer", pool.organizerPayment?.amount))
-
-                // Notify each paid contributor
-                for (const c of paidContributors) {
-                    if (!c.email || c.isOrganizer) continue
-                    await sendEmail(c.email, `Gift Pool Cancelled – Radha Lakshmi`, cancelHtml(c.name, c.amount))
-                }
-
-                // Notify admin
-                if (process.env.ADMIN_EMAIL) {
-                    await sendEmail(process.env.ADMIN_EMAIL, `[Admin] Gift Pool Cancelled – Pool ${pool.poolId}`, `
-                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #eee;border-radius:10px;">
-                            <h2 style="color:#dc2626;">Gift Pool Cancelled</h2>
-                            <p><strong>Pool ID:</strong> ${pool.poolId}</p>
-                            <p><strong>Recipient:</strong> ${pool.recipientName}</p>
-                            <p><strong>Occasion:</strong> ${pool.occasion}</p>
-                            <p><strong>Goal:</strong> &#8377;${pool.targetAmount}</p>
-                            <p><strong>Collected:</strong> &#8377;${pool.collectedAmount}</p>
-                            <p><strong>Contributors who paid:</strong> ${paidContributors.length}</p>
-                            <p><strong>Organizer Email:</strong> ${organizer?.email || 'N/A'}</p>
-                            <p style="color:#888;font-size:12px;">Please process any pending refunds.</p>
-                        </div>
-                    `)
-                }
-            }
-
-            processed++
-        }
+        const processed = await runExpiredPoolsCheck()
 
         res.json({ success: true, processed })
 
     } catch (error) {
         console.log("processExpiredPools error:", error.message)
         res.json({ success: false, message: error.message })
+    }
+}
+
+// ─────────────────────────────────────────
+// 9c. CRON-TRIGGERED ROUTE (for Vercel Cron / external schedulers)
+//    No Clerk auth — protected instead by CRON_SECRET, since serverless
+//    functions can't run an in-process node-cron timer on Vercel.
+//    Set CRON_SECRET in your Vercel project's environment variables,
+//    then point a scheduler (Vercel Cron and/or a free external cron
+//    service like cron-job.org) at GET /api/gift/cron/process-expired
+//    with header:  Authorization: Bearer <CRON_SECRET>
+// ─────────────────────────────────────────
+export const cronProcessExpiredPools = async (req, res) => {
+    try {
+        const cronSecret = process.env.CRON_SECRET
+        if (!cronSecret) {
+            console.log("cronProcessExpiredPools: CRON_SECRET is not set on the server")
+            return res.status(500).json({ success: false, message: "CRON_SECRET not configured" })
+        }
+
+        const authHeader = req.headers.authorization || ""
+        const headerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null
+        const queryToken = req.query.secret // fallback for manual testing / schedulers that can't send headers
+
+        if (headerToken !== cronSecret && queryToken !== cronSecret) {
+            return res.status(401).json({ success: false, message: "Unauthorized" })
+        }
+
+        const processed = await runExpiredPoolsCheck()
+        console.log(`[cron] Gift pool check via HTTP trigger: processed ${processed} expired pool(s) at ${new Date().toISOString()}`)
+
+        res.json({ success: true, processed })
+
+    } catch (error) {
+        console.log("cronProcessExpiredPools error:", error.message)
+        res.status(500).json({ success: false, message: error.message })
     }
 }

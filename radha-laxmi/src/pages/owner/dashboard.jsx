@@ -211,8 +211,8 @@ import toast from 'react-hot-toast'
 const OCCASION_LABEL = { Wedding: 'Wedding', Birthday: 'Birthday', Festival: 'Festival', Anniversary: 'Anniversary', 'Baby Shower': 'Baby Shower' }
 
 const POOL_STATUS_CONFIG = {
-  active:    { label: 'Collecting',   dot: 'bg-amber-500',  card: 'bg-amber-50 border border-amber-200' },
-  completed: { label: 'Goal Reached', dot: 'bg-amber-500',  card: 'bg-amber-50 border border-amber-200' },
+  active:    { label: 'Collecting',   dot: 'bg-yellow-500',  card: 'bg-yellow-50 border border-yellow-200' },
+  completed: { label: 'Goal Reached', dot: 'bg-yellow-500',  card: 'bg-yellow-50 border border-yellow-200' },
   ordered:   { label: 'Order Placed', dot: 'bg-green-500',  card: 'bg-white border border-gray-200' },
   cancelled: { label: 'Cancelled',    dot: 'bg-red-500',    card: 'bg-red-50 border border-red-200' },
   expired:   { label: 'Expired',      dot: 'bg-red-400',    card: 'bg-red-50 border border-red-200' },
@@ -715,7 +715,7 @@ const dashboard = () => {
                       ? 'bg-red-100 text-red-600'
                       : pool.status === 'ordered'
                       ? 'bg-green-100 text-green-700'
-                      : 'bg-amber-100 text-amber-700'
+                      : 'bg-yellow-100 text-yellow-700'
                   }`}>
                     {cfg.label}
                   </div>

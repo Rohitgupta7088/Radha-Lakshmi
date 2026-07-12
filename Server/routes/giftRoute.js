@@ -41,6 +41,7 @@ import {
     getMyGiftActivity,
     getAllGiftPools,
     processExpiredPools,
+    cronProcessExpiredPools,
 } from "../controllers/giftController.js"
 import { authUser } from "../middleware/authMiddleware.js"
 
@@ -49,6 +50,11 @@ const giftRouter = express.Router()
 // Admin routes (owner role required — checked inside controller)
 giftRouter.get('/admin/all-pools', authUser, getAllGiftPools)
 giftRouter.post('/admin/process-expired', authUser, processExpiredPools)
+
+// Cron route (no Clerk auth — secured via CRON_SECRET instead).
+// Triggered by Vercel Cron (vercel.json) and/or an external scheduler
+// like cron-job.org for finer-than-daily frequency on the Hobby plan.
+giftRouter.get('/cron/process-expired', cronProcessExpiredPools)
 
 // Organizer routes (auth required)
 giftRouter.post('/create', authUser, createGiftPool)
